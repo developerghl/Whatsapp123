@@ -3,12 +3,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { Database } from '@/lib/supabase'
 import { API_ENDPOINTS, apiCall } from '@/lib/config'
 import SubaccountSettingsModal from '@/components/dashboard/SubaccountSettingsModal'
 import Modal from '@/components/ui/Modal'
-
-type GhlAccount = Database['public']['Tables']['ghl_accounts']['Row']
 
 interface SubaccountStatus {
   id: string
