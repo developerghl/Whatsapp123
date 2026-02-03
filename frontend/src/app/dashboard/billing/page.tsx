@@ -51,16 +51,16 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Billing & Payments</h1>
-        <p className="text-gray-600 mt-2">View your payment history and manage billing</p>
+        <h1 className="text-3xl font-bold text-gray-900">Billing</h1>
+        <p className="text-gray-600 mt-1">View your payment history</p>
       </div>
 
-      {/* Payment History */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Payment History</h2>
+      {/* Payment History - Minimal */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-8 py-6 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900">Payment History</h2>
         </div>
         
         {payments.length > 0 ? (
@@ -68,13 +68,13 @@ export default function BillingPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plan</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Plan</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Amount</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {payments.map((payment) => (
                   <tr key={payment.id}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -99,12 +99,14 @@ export default function BillingPage() {
             </table>
           </div>
         ) : (
-          <div className="px-6 py-16 text-center">
-            <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No payment history</h3>
-            <p className="text-gray-500">Your payment history will appear here once you make your first payment.</p>
+          <div className="px-6 py-20 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No payments yet</h3>
+            <p className="text-gray-500">Your payment history will appear here</p>
           </div>
         )}
       </div>

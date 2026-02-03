@@ -184,13 +184,13 @@ export default function SubscriptionPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header - Clean Minimal */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Subscription & Plans</h1>
-          <p className="text-gray-600 mt-2">Manage your subscription and upgrade your plan</p>
+          <h1 className="text-3xl font-bold text-gray-900">Subscription</h1>
+          <p className="text-gray-600 mt-1">Manage your plan and billing</p>
         </div>
-        {/* Show button for active, trialing, cancelled, trial, or any status with stripe_customer_id */}
         {subscription?.stripe_customer_id && (
           subscription?.subscription_status === 'active' || 
           subscription?.subscription_status === 'trialing' || 
@@ -200,23 +200,20 @@ export default function SubscriptionPage() {
           <button
             onClick={handleManageBilling}
             disabled={loadingPortal}
-            className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors shadow-sm"
+            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors"
           >
-            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-            </svg>
             {loadingPortal ? 'Loading...' : 'Manage Billing'}
           </button>
         ) : null}
       </div>
 
-      {/* Current Plan */}
-      <div className={`rounded-lg shadow-sm border p-6 ${
+      {/* Current Plan - Minimal Card */}
+      <div className={`rounded-xl p-8 border ${
         subscription?.subscription_status === 'expired' 
           ? 'bg-red-50 border-red-200' 
           : 'bg-white border-gray-200'
       }`}>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Current Plan</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-6">Current Plan</h2>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-2xl font-bold text-gray-900">
@@ -319,12 +316,12 @@ export default function SubscriptionPage() {
         )}
       </div>
 
-      {/* Available Plans */}
+      {/* Available Plans - Minimal Design */}
       <div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Available Plans</h2>
+        <h2 className="text-lg font-semibold text-gray-900 mb-6">Available Plans</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {plans.map((plan) => (
-            <div key={plan.name} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+            <div key={plan.name} className="bg-white rounded-xl border border-gray-200 p-8 hover:border-indigo-300 hover:shadow-lg transition-all">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
               </div>

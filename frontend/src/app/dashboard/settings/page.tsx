@@ -99,56 +99,58 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500">Manage your profile and security.</p>
+        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
+        <p className="text-gray-600 mt-1">Manage your account preferences</p>
       </div>
 
-      {/* Profile Card */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-medium text-gray-900">Profile</h2>
+      {/* Profile Card - Minimal */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-8 py-6 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900">Profile Information</h2>
         </div>
-        <form onSubmit={onSaveProfile} className="p-6 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form onSubmit={onSaveProfile} className="p-8 space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Display Name</label>
-              <input value={name} onChange={e => setName(e.target.value)} className="w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="Your name" />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Display Name</label>
+              <input value={name} onChange={e => setName(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" placeholder="Your name" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input value={email} disabled className="w-full rounded-md border-gray-200 bg-gray-50 text-gray-500" />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+              <input value={email} disabled className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-500" />
             </div>
           </div>
           <div className="flex justify-end">
-            <button disabled={savingProfile} className="px-4 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50">{savingProfile ? 'Saving...' : 'Save Changes'}</button>
+            <button disabled={savingProfile} className="px-6 py-2.5 rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 font-medium transition-colors">{savingProfile ? 'Saving...' : 'Save Changes'}</button>
           </div>
         </form>
       </div>
 
-      {/* Password Card */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-medium text-gray-900">Password</h2>
+      {/* Password Card - Minimal */}
+      <div className="bg-white rounded-xl border border-gray-200">
+        <div className="px-8 py-6 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
         </div>
-        <form onSubmit={onChangePassword} className="p-6 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <form onSubmit={onChangePassword} className="p-8 space-y-6">
+          <div className="grid grid-cols-1 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
-              <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="••••••••" />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+              <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" placeholder="••••••••" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="At least 8 characters" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500" placeholder="Repeat new password" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" placeholder="At least 8 characters" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
+                <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200" placeholder="Repeat new password" />
+              </div>
             </div>
           </div>
           <div className="flex justify-end">
-            <button disabled={savingPassword} className="px-4 py-2 rounded-md text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50">{savingPassword ? 'Updating...' : 'Change Password'}</button>
+            <button disabled={savingPassword} className="px-6 py-2.5 rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 font-medium transition-colors">{savingPassword ? 'Updating...' : 'Change Password'}</button>
           </div>
         </form>
       </div>
