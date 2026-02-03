@@ -30,7 +30,14 @@ export const API_ENDPOINTS = {
   
   // Subscription management
   cancelSubscription: `${API_BASE_URL}/api/stripe/cancel-subscription`,
-  customerPortal: `${API_BASE_URL}/api/stripe/customer-portal`
+  customerPortal: `${API_BASE_URL}/api/stripe/customer-portal`,
+  
+  // Subaccount settings endpoints
+  getSubaccountSettings: (ghlAccountId: string) => `${API_BASE_URL}/admin/subaccount/${ghlAccountId}/settings`,
+  updateSubaccountSettings: (ghlAccountId: string) => `${API_BASE_URL}/admin/subaccount/${ghlAccountId}/settings`,
+  getSubaccountAnalytics: (ghlAccountId: string) => `${API_BASE_URL}/admin/subaccount/${ghlAccountId}/analytics`,
+  getSubaccountSessions: (ghlAccountId: string) => `${API_BASE_URL}/admin/subaccount/${ghlAccountId}/sessions`,
+  activateSession: (ghlAccountId: string, sessionId: string) => `${API_BASE_URL}/admin/subaccount/${ghlAccountId}/sessions/${sessionId}/activate`
 };
 
 // Helper function to make authenticated API calls

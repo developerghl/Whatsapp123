@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { apiCall } from '@/lib/config'
+import { apiCall, API_ENDPOINTS } from '@/lib/config'
 
 interface SubaccountSettingsModalProps {
   isOpen: boolean
@@ -57,21 +57,21 @@ export default function SubaccountSettingsModal({
     setLoading(true)
     try {
       // Fetch settings
-      const settingsRes = await apiCall(`/admin/subaccount/${ghlAccountId}/settings`)
+      const settingsRes = await apiCall(API_ENDPOINTS.getSubaccountSettings(ghlAccountId))
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json()
         setSettings(settingsData.settings)
       }
 
       // Fetch analytics
-      const analyticsRes = await apiCall(`/admin/subaccount/${ghlAccountId}/analytics`)
+      const analyticsRes = await apiCall(API_ENDPOINTS.getSubaccountAnalytics(ghlAccountId))
       if (analyticsRes.ok) {
         const analyticsData = await analyticsRes.json()
         setAnalytics(analyticsData.analytics)
       }
 
       // Fetch sessions
-      const sessionsRes = await apiCall(`/admin/subaccount/${ghlAccountId}/sessions`)
+      const sessionsRes = await apiCall(API_ENDPOINTS.getSubaccountSessions(ghlAccountId))
       if (sessionsRes.ok) {
         const sessionsData = await sessionsRes.json()
         setSessions(sessionsData.sessions || [])
@@ -93,7 +93,7 @@ export default function SubaccountSettingsModal({
   const handleSave = async () => {
     setSaving(true)
     try {
-      const res = await apiCall(`/admin/subaccount/${ghlAccountId}/settings`, {
+      const res = await apiCall(API_ENDPOINTS.updateSubaccountSettings(ghlAccountId), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
@@ -118,7 +118,7 @@ export default function SubaccountSettingsModal({
 
   const handleActivateSession = async (sessionId: string) => {
     try {
-      const res = await apiCall(`/admin/subaccount/${ghlAccountId}/sessions/${sessionId}/activate`, {
+      const res = await apiCall(API_ENDPOINTS.activateSession(ghlAccountId, sessionId), {
         method: 'POST'
       })
 
@@ -309,43 +309,50 @@ export default function SubaccountSettingsModal({
             )}
 
             {/* Multi-Number Management */}
-            {sessions.length > 0 && (
-              <div className="border-b border-gray-200 pb-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Connected Numbers</h3>
-                <div className="space-y-2">
-                  {sessions.map((session) => (
-                    <div
-                      key={session.id}
-                      className={`flex items-center justify-between p-3 rounded-lg border ${
-                        session.is_active
-                          ? 'bg-green-50 border-green-200'
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">
-                          {session.phone_number_display || session.phone_number || 'No number'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Status: {session.status} {session.is_active && '• Active'}
-                        </p>
+            <div className="border-b border-gray-200 pb-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Connected Numbers</h3>
+              {sessions.length > 0 ? (
+                <>
+                  <div className="space-y-2">
+                    {sessions.map((session) => (
+                      <div
+                        key={session.id}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          session.is_active
+                            ? 'bg-green-50 border-green-200'
+                            : 'bg-gray-50 border-gray-200'
+                        }`}
+                      >
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">
+                            {session.phone_number_display || session.phone_number || 'No number'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            Status: {session.status} {session.is_active && '• Active'}
+                          </p>
+                        </div>
+                        {!session.is_active && session.status === 'ready' && (
+                          <button
+                            onClick={() => handleActivateSession(session.id)}
+                            className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                          >
+                            Activate
+                          </button>
+                        )}
                       </div>
-                      {!session.is_active && session.status === 'ready' && (
-                        <button
-                          onClick={() => handleActivateSession(session.id)}
-                          className="px-3 py-1 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
-                        >
-                          Activate
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Only one number can be active at a time. Activating a number will deactivate others.
+                  </p>
+                </>
+              ) : (
+                <div className="text-center py-4 text-sm text-gray-500">
+                  <p>No WhatsApp numbers connected yet.</p>
+                  <p className="text-xs mt-1">Create a session to connect a number.</p>
                 </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Only one number can be active at a time. Activating a number will deactivate others.
-                </p>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Actions */}
             <div className="flex items-center justify-end space-x-3 pt-4">

@@ -213,7 +213,7 @@ export default function SubscriptionPage() {
           <h1 className="text-3xl font-bold text-gray-900">Subscription & Plans</h1>
           <p className="text-gray-600 mt-2">Manage your subscription and upgrade your plan</p>
         </div>
-        {subscription?.subscription_status === 'active' && subscription.stripe_customer_id && (
+        {(subscription?.subscription_status === 'active' || subscription?.subscription_status === 'trialing' || subscription?.subscription_status === 'cancelled') && subscription?.stripe_customer_id && (
           <button
             onClick={handleManageBilling}
             disabled={loadingPortal}
