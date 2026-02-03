@@ -3235,9 +3235,10 @@ app.post('/whatsapp/webhook', async (req, res) => {
       }
     } else {
       // Setting is OFF - only sync if contact already exists
-      // Try to find existing contact by phone using proper locationId filter
+      // Try to find existing contact by phone using lookup endpoint
       try {
-        const searchRes = await makeGHLRequest(`${BASE}/contacts/search?locationId=${locationId}&phone=${encodeURIComponent(phone)}`, {
+        // GHL lookup endpoint - checks if contact exists by phone
+        const lookupRes = await makeGHLRequest(`${BASE}/contacts/lookup?locationId=${locationId}&phone=${encodeURIComponent(phone)}`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${validToken}`,
@@ -3246,22 +3247,30 @@ app.post('/whatsapp/webhook', async (req, res) => {
           }
         }, ghlAccount);
         
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          console.log(`🔍 Contact search result for ${phone}:`, searchData);
-          if (searchData.contacts && searchData.contacts.length > 0) {
-            // Contact exists - use it
-            contactId = searchData.contacts[0].id;
+        if (lookupRes.ok) {
+          const lookupData = await lookupRes.json();
+          console.log(`🔍 Contact lookup result for ${phone}:`, lookupData);
+          
+          // Check different response structures
+          if (lookupData.contact && lookupData.contact.id) {
+            contactId = lookupData.contact.id;
+            console.log(`✅ Found existing contact: ${contactId}`);
+          } else if (lookupData.contacts && lookupData.contacts.length > 0) {
+            contactId = lookupData.contacts[0].id;
+            console.log(`✅ Found existing contact: ${contactId}`);
+          } else if (lookupData.id) {
+            contactId = lookupData.id;
             console.log(`✅ Found existing contact: ${contactId}`);
           } else {
             console.log(`⚠️ Contact not found in GHL for ${phone}`);
           }
         } else {
-          console.log(`❌ Contact search failed:`, searchRes.status, searchRes.statusText);
+          const errorText = await lookupRes.text();
+          console.log(`❌ Contact lookup failed:`, lookupRes.status, errorText);
         }
-      } catch (searchError) {
-        console.error('Contact search error:', searchError);
-        // Silent fail - if search fails, contact doesn't exist
+      } catch (lookupError) {
+        console.error('Contact lookup error:', lookupError);
+        // Silent fail - if lookup fails, contact doesn't exist
       }
     }
     
