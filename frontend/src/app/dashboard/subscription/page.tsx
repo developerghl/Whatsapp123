@@ -46,10 +46,23 @@ export default function SubscriptionPage() {
   }, [user?.id])
 
   useEffect(() => {
+    // Sync with Stripe on load (silent background sync)
+    const syncWithStripe = async () => {
+      try {
+        await apiCall(API_ENDPOINTS.syncSubscription, { method: 'POST' })
+      } catch (error) {
+        console.error('Error syncing subscription:', error)
+      }
+    }
+    
+    syncWithStripe()
     fetchSubscription()
     
-    // Poll for updates every 10 seconds
-    const interval = setInterval(fetchSubscription, 10000)
+    // Poll for updates every 10 seconds (silent background sync)
+    const interval = setInterval(() => {
+      syncWithStripe()
+      fetchSubscription()
+    }, 10000)
     return () => clearInterval(interval)
   }, [fetchSubscription])
 
@@ -285,6 +298,94 @@ export default function SubscriptionPage() {
             )}
           </div>
         </div>
+        {/* Payment Failed Warning */}
+        {subscription?.subscription_status === 'past_due' && (
+          <div className="mt-6 p-6 bg-gradient-to-r from-orange-50 to-red-50 border-2 border-orange-300 rounded-xl">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mr-4">
+                <svg className="w-6 h-6 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-orange-900 mb-2">Payment Required</h3>
+                <p className="text-sm text-orange-800 mb-4">
+                  Your subscription payment has failed. Please pay your pending invoice to restore access to all services.
+                </p>
+                <p className="text-sm text-orange-700 mb-4 font-medium">
+                  ⚠️ Your existing accounts remain, but WhatsApp connections are disabled until payment is completed.
+                </p>
+                <button
+                  onClick={handleManageBilling}
+                  disabled={loadingPortal}
+                  className="inline-flex items-center px-6 py-3 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:shadow-none"
+                >
+                  {loadingPortal ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      Pay Invoice Now
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Subscription Cancelled Warning */}
+        {subscription?.subscription_status === 'cancelled' && (
+          <div className="mt-6 p-6 bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-300 rounded-xl">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-4">
+                <svg className="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-red-900 mb-2">Subscription Cancelled</h3>
+                <p className="text-sm text-red-800 mb-4">
+                  Your subscription has been cancelled. Please renew your subscription to restore access to all services.
+                </p>
+                <p className="text-sm text-red-700 mb-4 font-medium">
+                  ⚠️ Your existing accounts remain, but WhatsApp connections are disabled until subscription is renewed.
+                </p>
+                <button
+                  onClick={handleManageBilling}
+                  disabled={loadingPortal}
+                  className="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:shadow-none"
+                >
+                  {loadingPortal ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Renew Subscription
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {subscription?.subscription_status === 'expired' && (
           <div className="mt-6 p-5 bg-red-100 border border-red-300 rounded-xl">
             <div className="flex items-start">

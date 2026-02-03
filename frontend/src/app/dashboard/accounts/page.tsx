@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { API_ENDPOINTS, apiCall } from '@/lib/config'
 import SubaccountSettingsModal from '@/components/dashboard/SubaccountSettingsModal'
+import PaymentRenewalModal from '@/components/dashboard/PaymentRenewalModal'
 import Modal from '@/components/ui/Modal'
 
 interface SubaccountStatus {
@@ -33,6 +34,31 @@ export default function AccountsPage() {
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; locationId?: string }>({ open: false })
   const [confirmResetSession, setConfirmResetSession] = useState<{ open: boolean; locationId?: string }>({ open: false })
   const [settingsModal, setSettingsModal] = useState<{ open: boolean; ghlAccountId?: string; locationId?: string }>({ open: false })
+  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+
+  // Fetch subscription status
+  useEffect(() => {
+    const fetchSubscriptionStatus = async () => {
+      if (!user?.id) return
+      
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('subscription_status')
+          .eq('id', user.id)
+          .single()
+
+        if (!error && data) {
+          setSubscriptionStatus(data.subscription_status)
+        }
+      } catch (error) {
+        console.error('Error fetching subscription status:', error)
+      }
+    }
+
+    fetchSubscriptionStatus()
+  }, [user])
 
   const fetchGHLLocations = useCallback(async (showLoading = true) => {
     try {
@@ -261,8 +287,19 @@ export default function AccountsPage() {
     )
   }
 
+  const isPaymentRequired = subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled'
+
   return (
     <div className="space-y-6">
+      {/* Payment Renewal Modal */}
+      {isPaymentRequired && (
+        <PaymentRenewalModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          subscriptionStatus={subscriptionStatus === 'past_due' ? 'past_due' : 'cancelled'}
+        />
+      )}
+      
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -279,8 +316,16 @@ export default function AccountsPage() {
             Refresh
           </button>
           <button
-            onClick={() => window.location.href = '/dashboard/add-subaccount'}
-            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors shadow-sm"
+            onClick={() => {
+              if (subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled') {
+                setShowPaymentModal(true)
+              } else {
+                window.location.href = '/dashboard/add-subaccount'
+              }
+            }}
+            disabled={subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled'}
+            className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            title={subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled' ? 'Payment required to add new accounts' : ''}
           >
             + Add Account
           </button>

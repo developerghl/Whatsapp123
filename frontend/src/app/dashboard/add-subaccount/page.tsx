@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { apiCall, API_ENDPOINTS } from '@/lib/config'
+import PaymentRenewalModal from '@/components/dashboard/PaymentRenewalModal'
 
 export default function AddSubAccount() {
   const { user } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [subscriptionStatus, setSubscriptionStatus] = useState<{
     status: string
@@ -24,6 +26,7 @@ export default function AddSubAccount() {
     limit_reached: boolean
   } | null>(null)
   const [checking, setChecking] = useState(true)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
 
   // Check subscription status and limits
   useEffect(() => {
@@ -69,6 +72,17 @@ export default function AddSubAccount() {
     checkSubscription()
   }, [user])
 
+  // Check URL params for payment_failed error
+  useEffect(() => {
+    const error = searchParams.get('error')
+    const status = searchParams.get('status')
+    if (error === 'payment_failed' && (status === 'past_due' || status === 'cancelled')) {
+      setShowPaymentModal(true)
+      // Clear URL params
+      router.replace('/dashboard/add-subaccount')
+    }
+  }, [searchParams, router])
+
   // Helper to check if trial/subscription is expired
   const isExpired = (): boolean => {
     if (!subscriptionStatus) return false
@@ -88,6 +102,12 @@ export default function AddSubAccount() {
     return false
   }
 
+  // Check if payment is required (past_due or cancelled)
+  const isPaymentRequired = (): boolean => {
+    if (!subscriptionStatus) return false
+    return subscriptionStatus.status === 'past_due' || subscriptionStatus.status === 'cancelled'
+  }
+
   const handleConnect = async () => {
     setLoading(true)
 
@@ -95,6 +115,13 @@ export default function AddSubAccount() {
       // Check if user is logged in
       if (!user?.id) {
         alert('❌ Please login first to add your GHL account')
+        setLoading(false)
+        return
+      }
+
+      // Check if payment is required (past_due or cancelled)
+      if (isPaymentRequired()) {
+        setShowPaymentModal(true)
         setLoading(false)
         return
       }
@@ -168,16 +195,48 @@ export default function AddSubAccount() {
   }
 
   const expired = isExpired()
+  const paymentRequired = isPaymentRequired()
 
   return (
     <div className="space-y-8">
+      {/* Payment Renewal Modal */}
+      {subscriptionStatus && (subscriptionStatus.status === 'past_due' || subscriptionStatus.status === 'cancelled') && (
+        <PaymentRenewalModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          subscriptionStatus={subscriptionStatus.status === 'past_due' ? 'past_due' : 'cancelled'}
+        />
+      )}
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Add Subaccount</h1>
         <p className="text-gray-600 mt-1">Connect your GoHighLevel location to start using WhatsApp</p>
       </div>
 
-      {expired && (
+      {paymentRequired && (
+        <div className="bg-gradient-to-r from-orange-50 to-red-50 rounded-2xl border border-orange-200 p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-orange-900 mb-1">
+                ⚠️ {subscriptionStatus?.status === 'past_due' ? 'Payment Required' : 'Subscription Cancelled'}
+              </h3>
+              <p className="text-sm text-orange-700">
+                {subscriptionStatus?.status === 'past_due' 
+                  ? 'Your subscription payment has failed. Please update your payment method to continue adding accounts.'
+                  : 'Your subscription has been cancelled. Please renew to continue adding accounts.'}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowPaymentModal(true)}
+              className="inline-flex items-center px-5 py-2.5 border border-transparent text-sm font-semibold rounded-xl text-white bg-orange-600 hover:bg-orange-700 transition-all shadow-sm hover:shadow-md"
+            >
+              {subscriptionStatus?.status === 'past_due' ? 'Pay Invoice' : 'Renew Subscription'}
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {expired && !paymentRequired && (
         <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-2xl border border-red-200 p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -293,11 +352,13 @@ export default function AddSubAccount() {
           
           {/* Connect Button */}
           <button
-            onClick={handleConnect}
-            disabled={loading || expired || (subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new)}
+            onClick={paymentRequired ? () => setShowPaymentModal(true) : handleConnect}
+            disabled={loading || expired || paymentRequired || (subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new)}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 px-6 rounded-xl font-semibold text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl"
             title={
-              expired 
+              paymentRequired
+                ? 'Payment required. Please renew your subscription to add accounts.'
+                : expired 
                 ? 'Your trial has expired. Please upgrade to add accounts.'
                 : subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new
                 ? 'You have reached your subaccount limit. You can only re-add previously owned locations or purchase an additional subaccount.'

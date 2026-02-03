@@ -24,6 +24,9 @@ const Stripe = require('stripe');
 const { downloadMediaMessage, downloadContentFromMessage } = require('@whiskeysockets/baileys');
 // Import subaccount helpers
 const subaccountHelpers = require('./lib/subaccount-helpers');
+// Import drip queue processor
+const DripQueueProcessor = require('./lib/drip-queue-processor');
+const dripQueueProcessor = new DripQueueProcessor();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -648,6 +651,67 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
             console.log(`✅ Updated subscription status for user ${user.id}: ${JSON.stringify(statusUpdate)}`);
           }
           
+          // DISCONNECT ALL WHATSAPP SESSIONS when payment fails
+          // Existing accounts remain but WhatsApp connections are disabled
+          if (subscriptionStatus === 'past_due' || subscriptionStatus === 'unpaid' || subscriptionStatus === 'canceled') {
+            try {
+              console.log(`🔌 Disconnecting all WhatsApp sessions for user ${user.id} due to payment failure`);
+              
+              // Get all GHL accounts for this user
+              const { data: ghlAccounts } = await supabaseAdmin
+                .from('ghl_accounts')
+                .select('id, location_id')
+                .eq('user_id', user.id);
+
+              if (ghlAccounts && ghlAccounts.length > 0) {
+                let disconnectedCount = 0;
+                
+                for (const ghlAccount of ghlAccounts) {
+                  // Get all sessions for this account
+                  const { data: sessions } = await supabaseAdmin
+                    .from('sessions')
+                    .select('id, status')
+                    .eq('subaccount_id', ghlAccount.id);
+
+                  if (sessions && sessions.length > 0) {
+                    for (const session of sessions) {
+                      try {
+                        // Disconnect WhatsApp client
+                        const sessionName = `subaccount_${ghlAccount.id}_${session.id}`;
+                        await waManager.disconnectClient(sessionName);
+                        waManager.clearSessionData(sessionName);
+                        
+                        // Update database status
+                        await supabaseAdmin
+                          .from('sessions')
+                          .update({ status: 'disconnected' })
+                          .eq('id', session.id);
+                        
+                        disconnectedCount++;
+                        console.log(`✅ Disconnected session ${session.id} for account ${ghlAccount.id}`);
+                      } catch (sessionError) {
+                        console.error(`⚠️ Error disconnecting session ${session.id}:`, sessionError.message);
+                        // Still update database status even if disconnect fails
+                        await supabaseAdmin
+                          .from('sessions')
+                          .update({ status: 'disconnected' })
+                          .eq('id', session.id);
+                        disconnectedCount++;
+                      }
+                    }
+                  }
+                }
+                
+                console.log(`✅ Disconnected ${disconnectedCount} WhatsApp session(s) for user ${user.id}`);
+              } else {
+                console.log(`ℹ️ No GHL accounts found for user ${user.id} to disconnect`);
+              }
+            } catch (disconnectError) {
+              console.error(`❌ Error disconnecting WhatsApp sessions:`, disconnectError);
+              // Don't fail the webhook if disconnect fails
+            }
+          }
+          
           // Log payment failure event
           await supabaseAdmin.from('subscription_events').insert({
             user_id: user.id,
@@ -738,10 +802,18 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
           eventType = 'subscription_cancellation_scheduled';
           shouldLogEvent = true;
         } else if (subscription.status === 'past_due') {
+          // Payment failed - block account creation
           statusUpdate = {
             subscription_status: 'past_due'
           };
           eventType = 'subscription_past_due';
+          shouldLogEvent = true;
+        } else if (subscription.status === 'incomplete' || subscription.status === 'incomplete_expired') {
+          // Payment incomplete - treat as past_due
+          statusUpdate = {
+            subscription_status: 'past_due'
+          };
+          eventType = 'subscription_payment_incomplete';
           shouldLogEvent = true;
         }
 
@@ -811,6 +883,69 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
       }
 
       case 'invoice.payment_succeeded': {
+        const invoice = event.data.object;
+        const customerId = invoice.customer;
+        const subscriptionId = invoice.subscription;
+
+        // Find user by stripe_customer_id
+        const { data: user } = await supabaseAdmin
+          .from('users')
+          .select('id, email, name, subscription_plan, stripe_subscription_id, subscription_status')
+          .eq('stripe_customer_id', customerId)
+          .maybeSingle();
+
+        if (user && subscriptionId) {
+          console.log(`✅ Payment succeeded for user ${user.id}`);
+          
+          // Update subscription status to active if it was past_due or cancelled
+          if (user.subscription_status === 'past_due' || user.subscription_status === 'cancelled') {
+            try {
+              // Get subscription from Stripe to verify status
+              const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+              
+              if (stripeSubscription.status === 'active') {
+                await supabaseAdmin
+                  .from('users')
+                  .update({
+                    subscription_status: 'active'
+                  })
+                  .eq('id', user.id);
+                
+                console.log(`✅ Reactivated subscription for user ${user.id} after payment`);
+                
+                // Log payment success event
+                await supabaseAdmin.from('subscription_events').insert({
+                  user_id: user.id,
+                  event_type: 'payment_succeeded_reactivation',
+                  plan_name: user.subscription_plan || 'unknown',
+                  metadata: {
+                    invoice_id: invoice.id,
+                    subscription_id: subscriptionId,
+                    old_status: user.subscription_status,
+                    new_status: 'active'
+                  }
+                });
+              }
+            } catch (stripeError) {
+              console.error('❌ Error verifying subscription status:', stripeError);
+            }
+          } else {
+            // Log payment success event (for active subscriptions)
+            await supabaseAdmin.from('subscription_events').insert({
+              user_id: user.id,
+              event_type: 'payment_succeeded',
+              plan_name: user.subscription_plan || 'unknown',
+              metadata: {
+                invoice_id: invoice.id,
+                subscription_id: subscriptionId
+              }
+            });
+          }
+        }
+        break;
+      }
+
+      case 'invoice.payment_succeeded_OLD': {
         const invoice = event.data.object;
         const customerId = invoice.customer;
 
@@ -1305,9 +1440,10 @@ app.get('/oauth/callback', async (req, res) => {
       max: userInfo.max_subaccounts
     });
 
-    // Check if subscription/trial is expired - BLOCK ALL ACTIONS
+    // Check if subscription/trial is expired - BLOCK NEW ACCOUNT CREATION
     // IMPORTANT: Only check trial expiry if user is on trial/free plan
     // Active subscriptions (starter/professional) should NOT be blocked by trial_ends_at
+    // NOTE: past_due status does NOT block - existing accounts continue working
     const isOnTrial = userInfo.subscription_status === 'trial' || userInfo.subscription_status === 'free';
     const trialExpired = isOnTrial && userInfo.trial_ends_at && new Date(userInfo.trial_ends_at) <= new Date();
     const isExpired = userInfo.subscription_status === 'expired' || 
@@ -1323,6 +1459,15 @@ app.get('/oauth/callback', async (req, res) => {
       });
       const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
       return res.redirect(`${frontendUrl}/dashboard?error=subscription_expired`);
+    }
+    
+    // For past_due: Allow account creation but redirect to payment page
+    if (userInfo.subscription_status === 'past_due') {
+      console.log('⚠️ Payment failed (past_due) - redirecting to payment page', {
+        status: userInfo.subscription_status
+      });
+      const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
+      return res.redirect(`${frontendUrl}/dashboard/add-subaccount?error=payment_failed&status=past_due`);
     }
     
     // 2. Check if location already used by another user (anti-abuse)
@@ -1459,8 +1604,10 @@ app.get('/oauth/callback', async (req, res) => {
         
         const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
         
-        // For active subscriptions, show additional subaccount purchase option
-        if (userInfo.subscription_status === 'active') {
+        // For past_due: Redirect to payment page instead of blocking
+        if (userInfo.subscription_status === 'past_due') {
+          return res.redirect(`${frontendUrl}/dashboard/add-subaccount?error=payment_failed&status=past_due`);
+        } else if (userInfo.subscription_status === 'active') {
           return res.redirect(`${frontendUrl}/dashboard?error=limit_reached_additional&current=${currentCount}&max=${userInfo.max_subaccounts}&available=${availableCount}`);
         } else {
           return res.redirect(`${frontendUrl}/dashboard?error=trial_limit_reached&current=${currentCount}&max=${userInfo.max_subaccounts}&available=${availableCount}`);
@@ -1499,8 +1646,10 @@ app.get('/oauth/callback', async (req, res) => {
         
         const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
         
-        // For active subscriptions, show additional subaccount purchase option
-        if (userInfo.subscription_status === 'active') {
+        // For past_due: Redirect to payment page instead of blocking
+        if (userInfo.subscription_status === 'past_due') {
+          return res.redirect(`${frontendUrl}/dashboard/add-subaccount?error=payment_failed&status=past_due`);
+        } else if (userInfo.subscription_status === 'active') {
           return res.redirect(`${frontendUrl}/dashboard?error=limit_reached_additional&current=${currentCount}&max=${userInfo.max_subaccounts}&available=${availableCount}`);
         } else {
           return res.redirect(`${frontendUrl}/dashboard?error=trial_limit_reached&current=${currentCount}&max=${userInfo.max_subaccounts}&available=${availableCount}`);
@@ -6100,8 +6249,8 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
         .eq('id', userId)
         .single();
 
-      if (!userInfo || userInfo.subscription_status !== 'active') {
-        return res.status(400).json({ error: 'You must have an active subscription to purchase additional subaccounts' });
+      if (!userInfo || userInfo.subscription_status !== 'active' || userInfo.subscription_status === 'past_due') {
+        return res.status(400).json({ error: 'You must have an active subscription (payment up to date) to purchase additional subaccounts' });
       }
 
       // Additional subaccounts are only available for Professional Plan users
@@ -6669,9 +6818,195 @@ setInterval(async () => {
 }, 6 * 60 * 60 * 1000); // 6 hours
 
 // Start Drip Queue Processor
-const dripQueueProcessor = require('./lib/drip-queue-processor');
 dripQueueProcessor.start();
 console.log('✅ Drip Queue Processor started');
+
+// Manual subscription sync endpoint (for frontend to trigger)
+app.post('/api/subscription/sync', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get user's Stripe subscription ID
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, stripe_subscription_id, subscription_status, subscription_plan')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.stripe_subscription_id || !stripe) {
+      return res.json({ 
+        synced: false, 
+        message: 'No Stripe subscription found or Stripe not configured' 
+      });
+    }
+
+    // Sync this user's subscription
+    const stripeSubscription = await stripe.subscriptions.retrieve(user.stripe_subscription_id);
+    const stripeStatus = stripeSubscription.status;
+
+    let newStatus = user.subscription_status;
+    let statusUpdate = {};
+
+    if (stripeStatus === 'active' && stripeSubscription.cancel_at_period_end === false) {
+      newStatus = 'active';
+    } else if (stripeStatus === 'past_due' || stripeStatus === 'incomplete' || stripeStatus === 'incomplete_expired') {
+      newStatus = 'past_due';
+    } else if (stripeStatus === 'canceled' || stripeStatus === 'unpaid') {
+      newStatus = 'cancelled';
+      statusUpdate.max_subaccounts = 1;
+    } else if (stripeStatus === 'active' && stripeSubscription.cancel_at_period_end === true) {
+      newStatus = 'cancelled';
+    }
+
+    if (newStatus !== user.subscription_status) {
+      statusUpdate.subscription_status = newStatus;
+      
+      if (stripeSubscription.current_period_end) {
+        statusUpdate.subscription_ends_at = new Date(stripeSubscription.current_period_end * 1000).toISOString();
+      }
+
+      await supabaseAdmin
+        .from('users')
+        .update(statusUpdate)
+        .eq('id', user.id);
+
+      // Log the sync event
+      await supabaseAdmin.from('subscription_events').insert({
+        user_id: user.id,
+        event_type: 'subscription_synced_manual',
+        plan_name: user.subscription_plan || 'unknown',
+        metadata: {
+          stripe_subscription_id: user.stripe_subscription_id,
+          old_status: user.subscription_status,
+          new_status: newStatus,
+          stripe_status: stripeStatus
+        }
+      });
+    }
+
+    return res.json({ 
+      synced: true, 
+      status: newStatus,
+      stripe_status: stripeStatus,
+      message: newStatus !== user.subscription_status ? 'Subscription status updated' : 'Subscription status is up to date'
+    });
+  } catch (error) {
+    console.error('❌ Error in manual subscription sync:', error);
+    return res.status(500).json({ error: 'Failed to sync subscription status' });
+  }
+});
+
+// Periodic Subscription Status Sync with Stripe (Real-time sync)
+async function syncSubscriptionStatuses() {
+  if (!stripe) {
+    console.log('⚠️ Stripe not configured - skipping subscription sync');
+    return;
+  }
+
+  try {
+    console.log('🔄 Syncing subscription statuses with Stripe...');
+    
+    // Get all users with Stripe subscriptions
+    const { data: users, error } = await supabaseAdmin
+      .from('users')
+      .select('id, stripe_subscription_id, subscription_status, subscription_plan')
+      .not('stripe_subscription_id', 'is', null);
+
+    if (error) {
+      console.error('❌ Error fetching users for subscription sync:', error);
+      return;
+    }
+
+    if (!users || users.length === 0) {
+      console.log('📋 No users with Stripe subscriptions found');
+      return;
+    }
+
+    console.log(`📋 Found ${users.length} users with Stripe subscriptions to sync`);
+
+    let updatedCount = 0;
+    for (const user of users) {
+      try {
+        const stripeSubscription = await stripe.subscriptions.retrieve(user.stripe_subscription_id);
+        const stripeStatus = stripeSubscription.status;
+
+        // Map Stripe status to our status
+        let newStatus = user.subscription_status;
+        let statusUpdate = {};
+
+        if (stripeStatus === 'active' && stripeSubscription.cancel_at_period_end === false) {
+          newStatus = 'active';
+        } else if (stripeStatus === 'past_due' || stripeStatus === 'incomplete' || stripeStatus === 'incomplete_expired') {
+          newStatus = 'past_due';
+        } else if (stripeStatus === 'canceled' || stripeStatus === 'unpaid') {
+          newStatus = 'cancelled';
+          statusUpdate.max_subaccounts = 1; // Reset to trial limits
+        } else if (stripeStatus === 'active' && stripeSubscription.cancel_at_period_end === true) {
+          newStatus = 'cancelled'; // Cancelled but still has access
+        }
+
+        // Only update if status changed
+        if (newStatus !== user.subscription_status) {
+          statusUpdate.subscription_status = newStatus;
+          
+          // Update subscription end date
+          if (stripeSubscription.current_period_end) {
+            statusUpdate.subscription_ends_at = new Date(stripeSubscription.current_period_end * 1000).toISOString();
+          }
+
+          await supabaseAdmin
+            .from('users')
+            .update(statusUpdate)
+            .eq('id', user.id);
+
+          console.log(`✅ Updated user ${user.id}: ${user.subscription_status} → ${newStatus}`);
+          updatedCount++;
+
+          // Log the sync event
+          await supabaseAdmin.from('subscription_events').insert({
+            user_id: user.id,
+            event_type: 'subscription_synced',
+            plan_name: user.subscription_plan || 'unknown',
+            metadata: {
+              stripe_subscription_id: user.stripe_subscription_id,
+              old_status: user.subscription_status,
+              new_status: newStatus,
+              stripe_status: stripeStatus
+            }
+          });
+        }
+      } catch (stripeError) {
+        console.error(`❌ Error syncing subscription for user ${user.id}:`, stripeError.message);
+        // If subscription not found in Stripe, mark as cancelled
+        if (stripeError.code === 'resource_missing') {
+          await supabaseAdmin
+            .from('users')
+            .update({
+              subscription_status: 'cancelled',
+              max_subaccounts: 1
+            })
+            .eq('id', user.id);
+          console.log(`⚠️ Stripe subscription not found for user ${user.id} - marked as cancelled`);
+        }
+      }
+    }
+
+    console.log(`✅ Subscription sync completed. Updated ${updatedCount} users.`);
+  } catch (error) {
+    console.error('❌ Error in subscription sync:', error);
+  }
+}
+
+// Run subscription sync every 30 minutes for real-time updates
+setInterval(syncSubscriptionStatuses, 30 * 60 * 1000); // Every 30 minutes
+console.log('✅ Subscription sync scheduled (every 30 minutes)');
+
+// Run sync immediately on startup (after 10 seconds)
+setTimeout(syncSubscriptionStatuses, 10000);
 
 // Run immediately on startup
 setTimeout(async () => {
