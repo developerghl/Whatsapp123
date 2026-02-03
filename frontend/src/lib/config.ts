@@ -26,7 +26,10 @@ export const API_ENDPOINTS = {
   createCheckout: `${API_BASE_URL}/api/stripe/create-checkout`,
   
   // User subscription info
-  subscriptionInfo: `${API_BASE_URL}/api/user/subscription-info`
+  subscriptionInfo: `${API_BASE_URL}/api/user/subscription-info`,
+  
+  // Subscription management
+  cancelSubscription: `${API_BASE_URL}/api/stripe/cancel-subscription`
 };
 
 // Helper function to make authenticated API calls

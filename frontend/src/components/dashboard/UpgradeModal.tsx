@@ -182,20 +182,20 @@ export default function UpgradeModal({
                     </p>
                   </div>
 
-                  {/* Additional Subaccount Option */}
+                  {/* Additional Subaccount Option (Professional Plan Only) */}
                   {showAdditionalSubaccount && (
                     <div className="mb-6 border-2 border-indigo-500 rounded-xl p-6 bg-gradient-to-r from-indigo-50 to-purple-50">
                       <div className="flex items-center justify-between mb-4">
                         <div>
                           <h4 className="text-xl font-bold text-gray-900">Add Another Subaccount</h4>
-                          <p className="text-gray-600 text-sm mt-1">One-time payment for additional subaccount</p>
+                          <p className="text-gray-600 text-sm mt-1">One-time payment for additional subaccount (Professional Plan only)</p>
                         </div>
                         <span className="px-3 py-1 bg-indigo-100 text-indigo-800 text-xs font-semibold rounded-full">
-                          Quick Add
+                          Professional Only
                         </span>
                       </div>
                       <div className="mb-4">
-                        <span className="text-3xl font-bold text-gray-900">$10</span>
+                        <span className="text-3xl font-bold text-gray-900">$4</span>
                         <span className="text-gray-600"> one-time</span>
                       </div>
                       <ul className="space-y-2 mb-6">
@@ -223,7 +223,7 @@ export default function UpgradeModal({
                         disabled={loading === 'additional'}
                         className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all"
                       >
-                        {loading === 'additional' ? 'Loading...' : 'Add Subaccount for $10'}
+                        {loading === 'additional' ? 'Loading...' : 'Add Subaccount for $4'}
                       </button>
                     </div>
                   )}

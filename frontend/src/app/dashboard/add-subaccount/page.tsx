@@ -120,10 +120,10 @@ export default function AddSubAccount() {
         const availableCount = subscriptionInfo.previously_owned_locations?.length || 0
         
         if (availableCount > 0) {
-          alert(`⚠️ You've reached your subaccount limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}).\n\nYou can only re-add one of your ${availableCount} previously owned location(s), or purchase an additional subaccount for $10.\n\nPlease go back to the dashboard and use the "Add Account" button to see your options.`)
+          alert(`⚠️ You've reached your subaccount limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}).\n\nYou can only re-add one of your ${availableCount} previously owned location(s), or purchase an additional subaccount for $4 (Professional Plan only).\n\nPlease go back to the dashboard and use the "Add Account" button to see your options.`)
         } else {
           if (subscriptionInfo.subscription_status === 'active') {
-            alert(`⚠️ You've reached your subaccount limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}).\n\nPlease go back to the dashboard and purchase an additional subaccount for $10 to add a new location.`)
+            alert(`⚠️ You've reached your subaccount limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}).\n\nPlease go back to the dashboard and purchase an additional subaccount for $4 (Professional Plan only) to add a new location.`)
           } else {
             alert(`⚠️ You've reached your trial subaccount limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}).\n\nPlease upgrade your subscription to add more locations.`)
             router.push('/dashboard/subscription')
@@ -230,11 +230,11 @@ export default function AddSubAccount() {
                       </p>
                       {subscriptionInfo.previously_owned_locations && subscriptionInfo.previously_owned_locations.length > 0 ? (
                         <p className="mt-1">
-                          You can only re-add one of your {subscriptionInfo.previously_owned_locations.length} previously owned location(s), or purchase an additional subaccount for $10.
+                          You can only re-add one of your {subscriptionInfo.previously_owned_locations.length} previously owned location(s), or purchase an additional subaccount for $4 (Professional Plan only).
                         </p>
                       ) : subscriptionInfo.subscription_status === 'active' ? (
                         <p className="mt-1">
-                          Please go back to the dashboard to purchase an additional subaccount for $10.
+                          Please go back to the dashboard to purchase an additional subaccount for $4 (Professional Plan only).
                         </p>
                       ) : (
                         <p className="mt-1">

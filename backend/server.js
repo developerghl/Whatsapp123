@@ -10,6 +10,8 @@ const axios = require('axios');
 const Stripe = require('stripe');
 // Import Baileys functions for media decryption
 const { downloadMediaMessage, downloadContentFromMessage } = require('@whiskeysockets/baileys');
+// Import subaccount helpers
+const subaccountHelpers = require('./lib/subaccount-helpers');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -466,7 +468,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
                   stripe_session_id: session.id,
                   previous_max: userInfo.max_subaccounts,
                   new_max: newMax,
-                  amount: 1000 // $10 in cents
+                  amount: 400 // $4 in cents
                 }
               });
             }
@@ -642,14 +644,20 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
       case 'customer.subscription.updated': {
         const subscription = event.data.object;
 
-        // Update subscription end date
+        // Find user by subscription ID
         const { data: user } = await supabaseAdmin
           .from('users')
-          .select('id')
+          .select('id, subscription_plan')
           .eq('stripe_subscription_id', subscription.id)
           .maybeSingle();
 
-        if (user && subscription.current_period_end) {
+        if (!user) {
+          console.log(`⚠️ No user found for subscription ${subscription.id}`);
+          break;
+        }
+
+        // Update subscription end date
+        if (subscription.current_period_end) {
           await supabaseAdmin
             .from('users')
             .update({
@@ -660,19 +668,101 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
           console.log(`✅ Updated subscription end date for user ${user.id}`);
         }
 
-        // Handle subscription cancellation
-        if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
-          if (user) {
-            await supabaseAdmin
-              .from('users')
-              .update({
-                subscription_status: 'cancelled',
-                max_subaccounts: 1 // Reset to trial limits
-              })
-              .eq('id', user.id);
+        // Handle subscription status changes
+        let statusUpdate = {};
+        let shouldLogEvent = false;
+        let eventType = 'subscription_updated';
 
-            console.log(`⚠️ Subscription cancelled for user ${user.id}`);
-          }
+        if (subscription.status === 'active' && subscription.cancel_at_period_end === false) {
+          // Subscription reactivated
+          statusUpdate = {
+            subscription_status: 'active'
+          };
+          eventType = 'subscription_reactivated';
+          shouldLogEvent = true;
+        } else if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
+          // Subscription cancelled or unpaid
+          statusUpdate = {
+            subscription_status: 'cancelled',
+            max_subaccounts: 1 // Reset to trial limits
+          };
+          eventType = 'subscription_cancelled';
+          shouldLogEvent = true;
+        } else if (subscription.cancel_at_period_end === true && subscription.status === 'active') {
+          // Cancellation scheduled (user cancelled but still has access)
+          statusUpdate = {
+            subscription_status: 'cancelled' // Mark as cancelled but keep access
+          };
+          eventType = 'subscription_cancellation_scheduled';
+          shouldLogEvent = true;
+        } else if (subscription.status === 'past_due') {
+          statusUpdate = {
+            subscription_status: 'past_due'
+          };
+          eventType = 'subscription_past_due';
+          shouldLogEvent = true;
+        }
+
+        if (Object.keys(statusUpdate).length > 0) {
+          await supabaseAdmin
+            .from('users')
+            .update(statusUpdate)
+            .eq('id', user.id);
+
+          console.log(`✅ Updated subscription status for user ${user.id}: ${JSON.stringify(statusUpdate)}`);
+        }
+
+        // Log event
+        if (shouldLogEvent) {
+          await supabaseAdmin.from('subscription_events').insert({
+            user_id: user.id,
+            event_type: eventType,
+            plan_name: user.subscription_plan || 'unknown',
+            metadata: {
+              stripe_subscription_id: subscription.id,
+              status: subscription.status,
+              cancel_at_period_end: subscription.cancel_at_period_end,
+              current_period_end: subscription.current_period_end,
+              current_period_start: subscription.current_period_start
+            }
+          });
+        }
+
+        break;
+      }
+
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object;
+
+        const { data: user } = await supabaseAdmin
+          .from('users')
+          .select('id, subscription_plan')
+          .eq('stripe_subscription_id', subscription.id)
+          .maybeSingle();
+
+        if (user) {
+          // Subscription fully cancelled - access revoked
+          await supabaseAdmin
+            .from('users')
+            .update({
+              subscription_status: 'expired',
+              max_subaccounts: 1,
+              stripe_subscription_id: null
+            })
+            .eq('id', user.id);
+
+          // Log event
+          await supabaseAdmin.from('subscription_events').insert({
+            user_id: user.id,
+            event_type: 'subscription_deleted',
+            plan_name: user.subscription_plan || 'unknown',
+            metadata: {
+              stripe_subscription_id: subscription.id,
+              deleted_at: new Date().toISOString()
+            }
+          });
+
+          console.log(`⚠️ Subscription deleted for user ${user.id}. Access revoked.`);
         }
 
         break;
@@ -685,7 +775,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
         // Find user and update subscription status
         const { data: user } = await supabaseAdmin
           .from('users')
-          .select('id')
+          .select('id, subscription_plan')
           .eq('stripe_customer_id', customerId)
           .maybeSingle();
 
@@ -696,6 +786,20 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
               subscription_status: 'active'
             })
             .eq('id', user.id);
+
+          // Log payment success event
+          await supabaseAdmin.from('subscription_events').insert({
+            user_id: user.id,
+            event_type: 'payment_succeeded',
+            plan_name: user.subscription_plan || 'unknown',
+            metadata: {
+              invoice_id: invoice.id,
+              amount_paid: invoice.amount_paid,
+              currency: invoice.currency,
+              period_start: invoice.period_start,
+              period_end: invoice.period_end
+            }
+          });
 
           console.log(`✅ Payment succeeded for user ${user.id}`);
         }
@@ -2039,6 +2143,217 @@ app.get('/admin/session/:sessionId', requireAuth, async (req, res) => {
   }
 });
 
+// =====================================================
+// Subaccount Settings & Analytics API Endpoints
+// =====================================================
+
+// Get subaccount settings
+app.get('/admin/subaccount/:ghlAccountId/settings', requireAuth, async (req, res) => {
+  try {
+    const { ghlAccountId } = req.params;
+    
+    // Verify ownership
+    const { data: ghlAccount } = await supabaseAdmin
+      .from('ghl_accounts')
+      .select('user_id')
+      .eq('id', ghlAccountId)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+    
+    if (!ghlAccount) {
+      return res.status(404).json({ error: 'Subaccount not found' });
+    }
+    
+    const settings = await subaccountHelpers.getSettings(ghlAccountId);
+    res.json({ settings });
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+// Update subaccount settings
+app.put('/admin/subaccount/:ghlAccountId/settings', requireAuth, async (req, res) => {
+  try {
+    const { ghlAccountId } = req.params;
+    const { create_contact_in_ghl, drip_mode_enabled, drip_messages_per_batch, drip_delay_minutes } = req.body;
+    
+    // Verify ownership
+    const { data: ghlAccount } = await supabaseAdmin
+      .from('ghl_accounts')
+      .select('user_id')
+      .eq('id', ghlAccountId)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+    
+    if (!ghlAccount) {
+      return res.status(404).json({ error: 'Subaccount not found' });
+    }
+    
+    // Validate inputs
+    const updateData = {};
+    if (typeof create_contact_in_ghl === 'boolean') {
+      updateData.create_contact_in_ghl = create_contact_in_ghl;
+    }
+    if (typeof drip_mode_enabled === 'boolean') {
+      updateData.drip_mode_enabled = drip_mode_enabled;
+    }
+    if (typeof drip_messages_per_batch === 'number' && drip_messages_per_batch > 0) {
+      updateData.drip_messages_per_batch = drip_messages_per_batch;
+    }
+    if (typeof drip_delay_minutes === 'number' && drip_delay_minutes >= 0) {
+      updateData.drip_delay_minutes = drip_delay_minutes;
+    }
+    
+    const updated = await subaccountHelpers.updateSettings(ghlAccountId, req.user.id, updateData);
+    res.json({ settings: updated });
+  } catch (error) {
+    console.error('Error updating settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// Get subaccount analytics
+app.get('/admin/subaccount/:ghlAccountId/analytics', requireAuth, async (req, res) => {
+  try {
+    const { ghlAccountId } = req.params;
+    
+    // Verify ownership
+    const { data: ghlAccount } = await supabaseAdmin
+      .from('ghl_accounts')
+      .select('user_id')
+      .eq('id', ghlAccountId)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+    
+    if (!ghlAccount) {
+      return res.status(404).json({ error: 'Subaccount not found' });
+    }
+    
+    const analytics = await subaccountHelpers.getAnalytics(ghlAccountId);
+    res.json({ analytics });
+  } catch (error) {
+    console.error('Error fetching analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
+// Get sessions for subaccount (multi-number support)
+app.get('/admin/subaccount/:ghlAccountId/sessions', requireAuth, async (req, res) => {
+  try {
+    const { ghlAccountId } = req.params;
+    
+    // Verify ownership
+    const { data: ghlAccount } = await supabaseAdmin
+      .from('ghl_accounts')
+      .select('user_id')
+      .eq('id', ghlAccountId)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+    
+    if (!ghlAccount) {
+      return res.status(404).json({ error: 'Subaccount not found' });
+    }
+    
+    const { data: sessions, error } = await supabaseAdmin
+      .from('sessions')
+      .select('*')
+      .eq('subaccount_id', ghlAccountId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      throw error;
+    }
+    
+    res.json({ sessions: sessions || [] });
+  } catch (error) {
+    console.error('Error fetching sessions:', error);
+    res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
+});
+
+// Set active session (multi-number support)
+app.post('/admin/subaccount/:ghlAccountId/sessions/:sessionId/activate', requireAuth, async (req, res) => {
+  try {
+    const { ghlAccountId, sessionId } = req.params;
+    
+    // Verify ownership
+    const { data: ghlAccount } = await supabaseAdmin
+      .from('ghl_accounts')
+      .select('user_id')
+      .eq('id', ghlAccountId)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+    
+    if (!ghlAccount) {
+      return res.status(404).json({ error: 'Subaccount not found' });
+    }
+    
+    // Verify session belongs to this subaccount
+    const { data: session } = await supabaseAdmin
+      .from('sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .eq('subaccount_id', ghlAccountId)
+      .maybeSingle();
+    
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    
+    // Set as active (deactivates others)
+    await subaccountHelpers.setActiveSession(sessionId, ghlAccountId);
+    
+    res.json({ success: true, message: 'Session activated' });
+  } catch (error) {
+    console.error('Error activating session:', error);
+    res.status(500).json({ error: 'Failed to activate session' });
+  }
+});
+
+// Get drip queue status
+app.get('/admin/subaccount/:ghlAccountId/drip-queue', requireAuth, async (req, res) => {
+  try {
+    const { ghlAccountId } = req.params;
+    
+    // Verify ownership
+    const { data: ghlAccount } = await supabaseAdmin
+      .from('ghl_accounts')
+      .select('user_id')
+      .eq('id', ghlAccountId)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+    
+    if (!ghlAccount) {
+      return res.status(404).json({ error: 'Subaccount not found' });
+    }
+    
+    const { data: queue, error } = await supabaseAdmin
+      .from('drip_queue')
+      .select('*')
+      .eq('ghl_account_id', ghlAccountId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    
+    if (error) {
+      throw error;
+    }
+    
+    // Count by status
+    const stats = {
+      pending: queue.filter(q => q.status === 'pending').length,
+      processing: queue.filter(q => q.status === 'processing').length,
+      sent: queue.filter(q => q.status === 'sent').length,
+      failed: queue.filter(q => q.status === 'failed').length
+    };
+    
+    res.json({ queue: queue || [], stats });
+  } catch (error) {
+    console.error('Error fetching drip queue:', error);
+    res.status(500).json({ error: 'Failed to fetch drip queue' });
+  }
+});
+
 // Connect new subaccount
 app.post('/admin/ghl/connect-subaccount', requireAuth, async (req, res) => {
   try {
@@ -2306,18 +2621,48 @@ app.post('/ghl/provider/webhook', async (req, res) => {
       return res.json({ status: 'error', message: 'Token validation failed' });
     }
 
-    // Get active WhatsApp session
-    const { data: session } = await supabaseAdmin
-      .from('sessions')
-      .select('*')
-      .eq('subaccount_id', ghlAccount.id)
-      .eq('status', 'ready')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Get subaccount settings
+    const settings = await subaccountHelpers.getSettings(ghlAccount.id);
     
+    // Check if drip mode is enabled
+    if (settings.drip_mode_enabled) {
+      // Add to drip queue instead of sending immediately
+      try {
+        await subaccountHelpers.addToDripQueue(ghlAccount.id, ghlAccount.user_id, {
+          contactId: contactId || null,
+          phone: phoneNumber,
+          message: messageText,
+          messageType: 'text',
+          attachments: attachments || []
+        });
+        console.log(`📥 Message added to drip queue for location: ${locationId}`);
+        return res.json({ status: 'queued', message: 'Message added to drip queue' });
+      } catch (queueError) {
+        console.error('Error adding to drip queue:', queueError);
+        // Fall through to send immediately if queue fails
+      }
+    }
+    
+    // Get active WhatsApp session (multi-number support)
+    let session = await subaccountHelpers.getActiveSession(ghlAccount.id);
+    
+    // Fallback to old method if no active session found
     if (!session) {
-      return res.json({ status: 'success' });
+      const { data: fallbackSession } = await supabaseAdmin
+        .from('sessions')
+        .select('*')
+        .eq('subaccount_id', ghlAccount.id)
+        .eq('status', 'ready')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (!fallbackSession) {
+        return res.json({ status: 'error', message: 'No active WhatsApp session found' });
+      }
+      
+      // Use fallback session
+      session = fallbackSession;
     }
     
     // Get WhatsApp client using Baileys
@@ -2666,6 +3011,9 @@ app.post('/ghl/provider/webhook', async (req, res) => {
       
       console.log('✅ Message sent successfully via Baileys');
           console.log('✅ Webhook Debug - Message delivery confirmed');
+          
+          // Track analytics for sent message
+          await subaccountHelpers.incrementAnalytics(ghlAccount.id, ghlAccount.user_id, 'sent');
     } catch (sendError) {
           console.error(`❌ Error in waManager.sendMessage:`, sendError);
           console.error(`❌ Error stack:`, sendError.stack);
@@ -2831,46 +3179,83 @@ app.post('/whatsapp/webhook', async (req, res) => {
     // Get valid token for this GHL account
     const validToken = await ensureValidToken(ghlAccount);
     
-    // Upsert contact (same location)
+    // Check subaccount settings for contact creation toggle
+    const settings = await subaccountHelpers.getSettings(ghlAccount.id);
+    
+    // Upsert contact (same location) - only if setting allows
     let contactId = null;
-    try {
-      const contactRes = await makeGHLRequest(`${BASE}/contacts/`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${validToken}`,
-          Version: "2021-07-28",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          phone: phone,
-          name: phone,
-          locationId: locationId
-        })
-      }, ghlAccount);
-      
-      if (contactRes.ok) {
-        const contactData = await contactRes.json();
-        contactId = contactData.contact?.id;
-      } else {
-        const errorText = await contactRes.text();
+    
+    if (settings.create_contact_in_ghl) {
+      // Setting is ON - create/upsert contact
+      try {
+        const contactRes = await makeGHLRequest(`${BASE}/contacts/`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${validToken}`,
+            Version: "2021-07-28",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            phone: phone,
+            name: phone,
+            locationId: locationId
+          })
+        }, ghlAccount);
         
-        // Try to extract contactId from error if it's a duplicate contact error
-        try {
-          const errorJson = JSON.parse(errorText);
-          if (errorJson.meta && errorJson.meta.contactId) {
-            contactId = errorJson.meta.contactId;
+        if (contactRes.ok) {
+          const contactData = await contactRes.json();
+          contactId = contactData.contact?.id;
+        } else {
+          const errorText = await contactRes.text();
+          
+          // Try to extract contactId from error if it's a duplicate contact error
+          try {
+            const errorJson = JSON.parse(errorText);
+            if (errorJson.meta && errorJson.meta.contactId) {
+              contactId = errorJson.meta.contactId;
+            }
+          } catch (parseError) {
+            // Silent fail
           }
-        } catch (parseError) {
-          // Silent fail
         }
+      } catch (contactError) {
+        // Silent fail
       }
-    } catch (contactError) {
-      // Silent fail
+    } else {
+      // Setting is OFF - only sync if contact already exists
+      // Try to find existing contact by phone
+      try {
+        const searchRes = await makeGHLRequest(`${BASE}/contacts/search?phone=${encodeURIComponent(phone)}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${validToken}`,
+            Version: "2021-07-28",
+            "Content-Type": "application/json"
+          }
+        }, ghlAccount);
+        
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          if (searchData.contacts && searchData.contacts.length > 0) {
+            // Contact exists - use it
+            contactId = searchData.contacts[0].id;
+          }
+        }
+      } catch (searchError) {
+        // Silent fail - if search fails, contact doesn't exist
+      }
     }
     
+    // If no contactId found and setting is OFF, don't sync message
     if (!contactId) {
-      return res.json({ status: 'success' });
+      console.log(`⏭️ Skipping message sync - contact creation disabled and contact not found for ${phone}`);
+      // Still track analytics for received message
+      await subaccountHelpers.incrementAnalytics(ghlAccount.id, ghlAccount.user_id, 'received');
+      return res.json({ status: 'success', reason: 'contact_creation_disabled' });
     }
+    
+    // Track analytics for received message
+    await subaccountHelpers.incrementAnalytics(ghlAccount.id, ghlAccount.user_id, 'received');
     
     // Add INBOUND message (Custom provider)
     try {
@@ -5656,8 +6041,19 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'You must have an active subscription to purchase additional subaccounts' });
       }
 
-      // Create one-time payment for $10 additional subaccount
-      const additionalSubaccountPrice = 1000; // $10 in cents
+      // Additional subaccounts are only available for Professional Plan users
+      const { data: fullUserInfo } = await supabaseAdmin
+        .from('users')
+        .select('subscription_plan')
+        .eq('id', userId)
+        .single();
+
+      if (!fullUserInfo || fullUserInfo.subscription_plan !== 'professional') {
+        return res.status(400).json({ error: 'Additional subaccounts are only available for Professional Plan subscribers' });
+      }
+
+      // Create one-time payment for $4 additional subaccount (Professional Plan only)
+      const additionalSubaccountPrice = 400; // $4 in cents
 
       const frontendUrl = process.env.FRONTEND_URL || 'https://whatsappghl.vercel.app';
       const businessName = process.env.STRIPE_BUSINESS_NAME || 'Octendr';
@@ -5668,7 +6064,7 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: 'Additional Subaccount',
+              name: 'Additional Subaccount (Professional Plan)',
               description: 'Add one more subaccount to your existing plan'
             },
             unit_amount: additionalSubaccountPrice,
@@ -5795,6 +6191,90 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
     console.error('Stripe checkout error:', error);
     res.status(500).json({ 
       error: 'Failed to create checkout session',
+      details: error.message
+    });
+  }
+});
+
+// Cancel Subscription Endpoint
+// Endpoint: POST /api/stripe/cancel-subscription
+// Required Header: X-User-ID (user authentication)
+// Request body: { subscription_id }
+app.post('/api/stripe/cancel-subscription', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe not configured' });
+    }
+
+    const userId = req.user.id;
+    const { subscription_id } = req.body;
+
+    if (!subscription_id) {
+      return res.status(400).json({ error: 'Subscription ID is required' });
+    }
+
+    // Verify subscription belongs to user
+    const { data: user } = await supabaseAdmin
+      .from('users')
+      .select('id, stripe_subscription_id, subscription_status, subscription_plan')
+      .eq('id', userId)
+      .single();
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.stripe_subscription_id !== subscription_id) {
+      return res.status(403).json({ error: 'Subscription does not belong to this user' });
+    }
+
+    if (user.subscription_status !== 'active') {
+      return res.status(400).json({ error: 'Only active subscriptions can be cancelled' });
+    }
+
+    // Cancel subscription in Stripe (at period end)
+    const subscription = await stripe.subscriptions.update(subscription_id, {
+      cancel_at_period_end: true
+    });
+
+    // Update database immediately - mark as cancelled but keep access until period end
+    const { error: updateError } = await supabaseAdmin
+      .from('users')
+      .update({
+        subscription_status: 'cancelled',
+        subscription_ends_at: new Date(subscription.current_period_end * 1000).toISOString()
+      })
+      .eq('id', userId);
+
+    if (updateError) {
+      console.error('❌ Error updating subscription status:', updateError);
+      return res.status(500).json({ error: 'Failed to update subscription status' });
+    }
+
+    // Log cancellation event
+    await supabaseAdmin.from('subscription_events').insert({
+      user_id: userId,
+      event_type: 'subscription_cancelled',
+      plan_name: user.subscription_plan || 'unknown',
+      metadata: {
+        stripe_subscription_id: subscription_id,
+        cancel_at_period_end: true,
+        period_end: subscription.current_period_end,
+        cancelled_at: new Date().toISOString()
+      }
+    });
+
+    console.log(`✅ Subscription ${subscription_id} cancelled for user ${userId}. Access until period end.`);
+
+    res.json({ 
+      success: true, 
+      message: 'Subscription cancelled successfully',
+      access_until: new Date(subscription.current_period_end * 1000).toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error cancelling subscription:', error);
+    res.status(500).json({ 
+      error: 'Failed to cancel subscription',
       details: error.message
     });
   }
@@ -6032,6 +6512,11 @@ setInterval(async () => {
 setInterval(async () => {
   await checkAndSendReminders();
 }, 6 * 60 * 60 * 1000); // 6 hours
+
+// Start Drip Queue Processor
+const dripQueueProcessor = require('./lib/drip-queue-processor');
+dripQueueProcessor.start();
+console.log('✅ Drip Queue Processor started');
 
 // Run immediately on startup
 setTimeout(async () => {

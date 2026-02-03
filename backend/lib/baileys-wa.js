@@ -680,6 +680,46 @@ class BaileysWhatsAppManager {
           console.log(`📊 Updating database status to 'ready' for session: ${sessionId}`);
           this.updateDatabaseStatus(sessionId, 'ready', phoneNumber);
           
+          // Auto-activate this session if it's the first active one for this subaccount
+          // Extract subaccount_id from sessionId (format: subaccount_<id>_<sessionId>)
+          try {
+            const sessionParts = sessionId.split('_');
+            if (sessionParts.length >= 3) {
+              const subaccountId = sessionParts[1];
+              const subaccountHelpers = require('./subaccount-helpers');
+              
+              // Check if there's already an active session
+              const activeSession = await subaccountHelpers.getActiveSession(subaccountId);
+              
+              // If no active session, make this one active
+              if (!activeSession) {
+                // Get session ID from database using subaccount_id
+                const { createClient } = require('@supabase/supabase-js');
+                const supabaseAdmin = createClient(
+                  process.env.SUPABASE_URL,
+                  process.env.SUPABASE_SERVICE_ROLE_KEY
+                );
+                
+                const { data: session } = await supabaseAdmin
+                  .from('sessions')
+                  .select('id')
+                  .eq('subaccount_id', subaccountId)
+                  .eq('status', 'ready')
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                
+                if (session) {
+                  await subaccountHelpers.setActiveSession(session.id, subaccountId);
+                  console.log(`✅ Auto-activated session ${session.id} for subaccount ${subaccountId}`);
+                }
+              }
+            }
+          } catch (autoActivateError) {
+            // Non-critical - log but don't fail
+            console.error('Error auto-activating session:', autoActivateError);
+          }
+          
           // Update lastUpdate periodically to keep connection alive
           // Store interval ID to cleanup later if needed
           const updateInterval = setInterval(() => {

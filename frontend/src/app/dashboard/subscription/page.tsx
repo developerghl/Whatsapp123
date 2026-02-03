@@ -3,14 +3,17 @@
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { useEffect, useState } from 'react'
-import { API_ENDPOINTS } from '@/lib/config'
+import { API_ENDPOINTS, apiCall } from '@/lib/config'
 
 interface SubscriptionData {
   subscription_status: string
   subscription_plan: string
   max_subaccounts: number
   trial_ends_at?: string
+  subscription_started_at?: string
+  subscription_ends_at?: string
   stripe_subscription_id?: string
+  stripe_customer_id?: string
 }
 
 export default function SubscriptionPage() {
@@ -18,6 +21,9 @@ export default function SubscriptionPage() {
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
   const [loading, setLoading] = useState(true)
   const [upgrading, setUpgrading] = useState<string | null>(null)
+  const [cancelling, setCancelling] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchSubscription = async () => {
@@ -26,7 +32,7 @@ export default function SubscriptionPage() {
       try {
         const { data, error } = await supabase
           .from('users')
-          .select('subscription_status, subscription_plan, max_subaccounts, trial_ends_at, stripe_subscription_id')
+          .select('subscription_status, subscription_plan, max_subaccounts, trial_ends_at, subscription_started_at, subscription_ends_at, stripe_subscription_id, stripe_customer_id')
           .eq('id', user.id)
           .single()
 
@@ -41,6 +47,10 @@ export default function SubscriptionPage() {
     }
 
     fetchSubscription()
+    
+    // Poll for updates every 10 seconds
+    const interval = setInterval(fetchSubscription, 10000)
+    return () => clearInterval(interval)
   }, [user])
 
   const plans = [
@@ -98,6 +108,56 @@ export default function SubscriptionPage() {
       alert(`Error: ${errorMessage}`)
       setUpgrading(null)
     }
+  }
+
+  const handleCancel = async () => {
+    if (!user?.id || !subscription?.stripe_subscription_id) {
+      setError('No active subscription to cancel')
+      return
+    }
+
+    if (!confirm('Are you sure you want to cancel your subscription? You will retain access until the end of your current billing period.')) {
+      return
+    }
+
+    setCancelling(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await apiCall(API_ENDPOINTS.cancelSubscription, {
+        method: 'POST',
+        body: JSON.stringify({
+          subscription_id: subscription.stripe_subscription_id
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to cancel subscription' }))
+        throw new Error(errorData.error || 'Failed to cancel subscription')
+      }
+
+      setSuccess('Subscription cancelled successfully. You will retain access until the end of your billing period.')
+      
+      // Refresh subscription data
+      setTimeout(() => {
+        fetchSubscription()
+      }, 2000)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel subscription'
+      setError(errorMessage)
+    } finally {
+      setCancelling(false)
+    }
+  }
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    })
   }
 
   if (loading) {
@@ -170,6 +230,60 @@ export default function SubscriptionPage() {
             <p className="text-sm text-red-700">
               Upgrade to a paid plan now to restore access to all your subaccounts and features.
             </p>
+          </div>
+        )}
+        
+        {/* Subscription Details */}
+        {subscription && (subscription.subscription_status === 'active' || subscription.subscription_status === 'cancelled') && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Subscription Details</h3>
+            <dl className="grid grid-cols-2 gap-4 text-sm">
+              {subscription.subscription_started_at && (
+                <div>
+                  <dt className="text-gray-600">Started</dt>
+                  <dd className="font-medium text-gray-900">{formatDate(subscription.subscription_started_at)}</dd>
+                </div>
+              )}
+              {subscription.subscription_ends_at && (
+                <div>
+                  <dt className="text-gray-600">
+                    {subscription.subscription_status === 'cancelled' ? 'Access Until' : 'Renews On'}
+                  </dt>
+                  <dd className="font-medium text-gray-900">{formatDate(subscription.subscription_ends_at)}</dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
+
+        {/* Error/Success Messages */}
+        {error && (
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-sm text-red-800">{error}</p>
+          </div>
+        )}
+        {success && (
+          <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
+            <p className="text-sm text-green-800">{success}</p>
+          </div>
+        )}
+
+        {/* Cancel Subscription Button */}
+        {subscription?.subscription_status === 'active' && subscription.stripe_subscription_id && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-yellow-800">
+                <strong>Note:</strong> Cancelling your subscription will stop automatic renewals. 
+                You will retain full access until the end of your current billing period.
+              </p>
+            </div>
+            <button
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="w-full py-3 px-4 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+            >
+              {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
+            </button>
           </div>
         )}
       </div>

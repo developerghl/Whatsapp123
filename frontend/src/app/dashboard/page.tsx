@@ -7,6 +7,8 @@ import { Database } from '@/lib/supabase'
 import { API_ENDPOINTS, apiCall } from '@/lib/config'
 import TrialBanner from '@/components/dashboard/TrialBanner'
 import UpgradeModal from '@/components/dashboard/UpgradeModal'
+import SubaccountSettingsModal from '@/components/dashboard/SubaccountSettingsModal'
+import ManageSubscriptionModal from '@/components/dashboard/ManageSubscriptionModal'
 import Modal from '@/components/ui/Modal'
 // import Modal from '@/components/ui/Modal'
 
@@ -36,11 +38,14 @@ export default function Dashboard() {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; locationId?: string }>({ open: false })
   const [confirmResetSession, setConfirmResetSession] = useState<{ open: boolean; locationId?: string }>({ open: false })
+  const [settingsModal, setSettingsModal] = useState<{ open: boolean; ghlAccountId?: string; locationId?: string }>({ open: false })
+  const [showManageSubscription, setShowManageSubscription] = useState(false)
   
   // Trial system state
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [userSubscription, setUserSubscription] = useState<{
     status: string
+    plan?: string
     maxSubaccounts: number
     currentSubaccounts: number
     trialEndsAt?: string
@@ -151,7 +156,7 @@ export default function Dashboard() {
       try {
         const { data, error } = await supabase
           .from('users')
-          .select('subscription_status, max_subaccounts, total_subaccounts, trial_ends_at')
+          .select('subscription_status, subscription_plan, max_subaccounts, total_subaccounts, trial_ends_at')
           .eq('id', user.id)
           .single()
 
@@ -159,6 +164,7 @@ export default function Dashboard() {
           const currentCount = subaccountStatuses.length
           setUserSubscription({
             status: data.subscription_status || 'trial',
+            plan: data.subscription_plan,
             maxSubaccounts: data.max_subaccounts || 1,
             currentSubaccounts: currentCount,
             trialEndsAt: data.trial_ends_at
@@ -209,6 +215,7 @@ export default function Dashboard() {
           if (!error && data) {
             setUserSubscription({
               status: data.subscription_status || 'trial',
+              plan: data.subscription_plan,
               maxSubaccounts: data.max_subaccounts || 1,
               currentSubaccounts: subaccountStatuses.length,
               trialEndsAt: data.trial_ends_at
@@ -281,7 +288,7 @@ export default function Dashboard() {
       const available = urlParams.get('available') || '0'
       setNotification({
         type: 'error',
-        message: `⚠️ Limit reached! You have ${current}/${max} subaccounts. You can only re-add your ${available} previously owned location(s). To add a NEW location, purchase an additional subaccount for $10 or upgrade your plan.`
+        message: `⚠️ Limit reached! You have ${current}/${max} subaccounts. You can only re-add your ${available} previously owned location(s). To add a NEW location, purchase an additional subaccount for $4 (Professional Plan only) or upgrade your plan.`
       })
       setShowUpgradeModal(true)
       // Clean URL
@@ -593,11 +600,22 @@ export default function Dashboard() {
           currentPlan={userSubscription.status}
           currentSubaccounts={userSubscription.currentSubaccounts}
           maxSubaccounts={userSubscription.maxSubaccounts}
-          showAdditionalSubaccount={userSubscription.status === 'active'}
+          showAdditionalSubaccount={userSubscription.status === 'active' && userSubscription.plan === 'professional'}
         />
       )}
 
       {/* Header Stats - reference style */}
+      <div className="mb-6 flex items-center justify-end">
+        <button
+          onClick={() => setShowManageSubscription(true)}
+          className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors shadow-sm"
+        >
+          <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          Manage Subscription
+        </button>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="rounded-2xl p-6 border border-transparent bg-gradient-to-br from-emerald-50 to-white shadow-sm">
           <div className="flex items-center justify-between">
@@ -806,6 +824,16 @@ export default function Dashboard() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => setSettingsModal({ open: true, ghlAccountId: account.id, locationId: account.ghl_location_id })}
+                              className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                              title="Settings"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              </svg>
+                            </button>
                             <button
                               onClick={() => openQR(account.ghl_location_id)}
                               className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors"
@@ -1026,6 +1054,16 @@ export default function Dashboard() {
           <p className="mt-3 font-medium text-orange-600">You will need to scan QR code again to reconnect.</p>
         </div>
       </Modal>
+
+      {/* Subaccount Settings Modal */}
+      {settingsModal.open && settingsModal.ghlAccountId && settingsModal.locationId && (
+        <SubaccountSettingsModal
+          isOpen={settingsModal.open}
+          onClose={() => setSettingsModal({ open: false })}
+          ghlAccountId={settingsModal.ghlAccountId}
+          locationId={settingsModal.locationId}
+        />
+      )}
     </div>
   )
 }
