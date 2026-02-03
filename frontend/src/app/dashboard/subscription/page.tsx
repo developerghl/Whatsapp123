@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { API_ENDPOINTS, apiCall } from '@/lib/config'
 
 interface SubscriptionData {
-  subscription_status: string
+  subscription_status: 'active' | 'trial' | 'free' | 'past_due' | 'cancelled' | 'expired' | 'trialing'
   subscription_plan: string
   max_subaccounts: number
   trial_ends_at?: string
@@ -511,7 +511,7 @@ export default function SubscriptionPage() {
       <div className="mt-12">
         <h2 className="text-2xl font-bold text-gray-900 mb-8">Available Plans</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {plans.map((plan, index) => {
+          {plans.map((plan) => {
             // Determine if this is the current plan
             // For cancelled subscriptions, still show the plan they had
             const planKey = plan.planKey || (plan.name === 'Free Trial' ? 'free' : null)
