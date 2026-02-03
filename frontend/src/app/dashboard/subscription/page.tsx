@@ -38,7 +38,10 @@ export default function SubscriptionPage() {
         .single()
 
       if (!error && data) {
+        console.log('📊 Subscription data fetched:', data)
         setSubscription(data)
+      } else if (error) {
+        console.error('❌ Error fetching subscription:', error)
       }
     } catch (error) {
       console.error('Error fetching subscription:', error)
@@ -213,7 +216,19 @@ export default function SubscriptionPage() {
           <h1 className="text-3xl font-bold text-gray-900">Subscription & Plans</h1>
           <p className="text-gray-600 mt-2">Manage your subscription and upgrade your plan</p>
         </div>
-        {(subscription?.subscription_status === 'active' || subscription?.subscription_status === 'trialing' || subscription?.subscription_status === 'cancelled') && subscription?.stripe_customer_id && (
+        {/* Debug info - remove in production */}
+        {subscription && (
+          <div className="text-xs text-gray-500 mr-4">
+            Status: {subscription.subscription_status} | Customer ID: {subscription.stripe_customer_id ? 'Yes' : 'No'}
+          </div>
+        )}
+        {/* Show button for active, trialing, cancelled, trial, or any status with stripe_customer_id */}
+        {subscription?.stripe_customer_id && (
+          subscription?.subscription_status === 'active' || 
+          subscription?.subscription_status === 'trialing' || 
+          subscription?.subscription_status === 'cancelled' ||
+          subscription?.subscription_status === 'trial'
+        ) ? (
           <button
             onClick={handleManageBilling}
             disabled={loadingPortal}
@@ -224,7 +239,7 @@ export default function SubscriptionPage() {
             </svg>
             {loadingPortal ? 'Loading...' : 'Manage Billing'}
           </button>
-        )}
+        ) : null}
       </div>
 
       {/* Current Plan */}
