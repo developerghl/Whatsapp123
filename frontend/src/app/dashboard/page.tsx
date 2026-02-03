@@ -117,7 +117,7 @@ export default function Dashboard() {
                   const analyticsData = await analyticsRes.json()
                   analytics = analyticsData.analytics || analytics
                 }
-              } catch (e) {
+              } catch {
                 // Silent fail for analytics
               }
               
@@ -702,7 +702,7 @@ export default function Dashboard() {
             <div>
               <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Messages</p>
               <p className="text-4xl font-bold text-purple-600 mt-2">
-                {subaccountStatuses.reduce((sum, acc) => sum + ((acc as any).total_messages_sent || 0), 0).toLocaleString()}
+                {subaccountStatuses.reduce((sum, acc) => sum + (acc.total_messages_sent || 0), 0).toLocaleString()}
               </p>
               <p className="text-xs text-gray-400 mt-2">Across all accounts</p>
             </div>
