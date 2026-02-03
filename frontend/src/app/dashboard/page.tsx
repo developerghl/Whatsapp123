@@ -8,7 +8,6 @@ import { API_ENDPOINTS, apiCall } from '@/lib/config'
 import TrialBanner from '@/components/dashboard/TrialBanner'
 import UpgradeModal from '@/components/dashboard/UpgradeModal'
 import SubaccountSettingsModal from '@/components/dashboard/SubaccountSettingsModal'
-import ManageSubscriptionModal from '@/components/dashboard/ManageSubscriptionModal'
 import Modal from '@/components/ui/Modal'
 // import Modal from '@/components/ui/Modal'
 
@@ -39,7 +38,6 @@ export default function Dashboard() {
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; locationId?: string }>({ open: false })
   const [confirmResetSession, setConfirmResetSession] = useState<{ open: boolean; locationId?: string }>({ open: false })
   const [settingsModal, setSettingsModal] = useState<{ open: boolean; ghlAccountId?: string; locationId?: string }>({ open: false })
-  const [showManageSubscription, setShowManageSubscription] = useState(false)
   
   // Trial system state
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
@@ -604,24 +602,7 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Manage Subscription Modal */}
-      <ManageSubscriptionModal
-        isOpen={showManageSubscription}
-        onClose={() => setShowManageSubscription(false)}
-      />
-
       {/* Header Stats - reference style */}
-      <div className="mb-6 flex items-center justify-end">
-        <button
-          onClick={() => setShowManageSubscription(true)}
-          className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors shadow-sm"
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-          Manage Subscription
-        </button>
-      </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="rounded-2xl p-6 border border-transparent bg-gradient-to-br from-emerald-50 to-white shadow-sm">
           <div className="flex items-center justify-between">

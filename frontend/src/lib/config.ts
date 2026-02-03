@@ -29,7 +29,8 @@ export const API_ENDPOINTS = {
   subscriptionInfo: `${API_BASE_URL}/api/user/subscription-info`,
   
   // Subscription management
-  cancelSubscription: `${API_BASE_URL}/api/stripe/cancel-subscription`
+  cancelSubscription: `${API_BASE_URL}/api/stripe/cancel-subscription`,
+  customerPortal: `${API_BASE_URL}/api/stripe/customer-portal`
 };
 
 // Helper function to make authenticated API calls

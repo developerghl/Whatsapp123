@@ -6208,6 +6208,61 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
   }
 });
 
+// Create Stripe Customer Portal Session
+// Endpoint: POST /api/stripe/customer-portal
+// Required Header: X-User-ID (user authentication)
+// Request body: { customer_id }
+// Response: { url } - Stripe Customer Portal URL
+app.post('/api/stripe/customer-portal', requireAuth, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe not configured' });
+    }
+
+    const userId = req.user.id;
+    const { customer_id } = req.body;
+
+    if (!customer_id) {
+      return res.status(400).json({ error: 'Customer ID is required' });
+    }
+
+    // Verify customer belongs to user
+    const { data: user } = await supabaseAdmin
+      .from('users')
+      .select('id, stripe_customer_id')
+      .eq('id', userId)
+      .single();
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.stripe_customer_id !== customer_id) {
+      return res.status(403).json({ error: 'Customer does not belong to this user' });
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://whatsappghl.vercel.app';
+
+    // Create customer portal session
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: customer_id,
+      return_url: `${frontendUrl}/dashboard/subscription`,
+    });
+
+    console.log(`✅ Customer portal session created for user ${userId}`);
+
+    res.json({ 
+      url: portalSession.url
+    });
+  } catch (error) {
+    console.error('❌ Error creating customer portal session:', error);
+    res.status(500).json({ 
+      error: 'Failed to create customer portal session',
+      details: error.message
+    });
+  }
+});
+
 // Cancel Subscription Endpoint
 // Endpoint: POST /api/stripe/cancel-subscription
 // Required Header: X-User-ID (user authentication)

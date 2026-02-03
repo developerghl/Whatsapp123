@@ -169,11 +169,63 @@ export default function SubscriptionPage() {
     )
   }
 
+  const [loadingPortal, setLoadingPortal] = useState(false)
+
+  const handleManageBilling = async () => {
+    if (!user?.id || !subscription?.stripe_customer_id) {
+      setError('No active subscription found')
+      return
+    }
+
+    setLoadingPortal(true)
+    setError(null)
+
+    try {
+      const response = await apiCall(API_ENDPOINTS.customerPortal, {
+        method: 'POST',
+        body: JSON.stringify({
+          customer_id: subscription.stripe_customer_id
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to create billing portal session' }))
+        throw new Error(errorData.error || 'Failed to create billing portal session')
+      }
+
+      const data = await response.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        throw new Error('No portal URL received')
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to open billing portal'
+      setError(errorMessage)
+    } finally {
+      setLoadingPortal(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Subscription & Plans</h1>
-        <p className="text-gray-600 mt-2">Manage your subscription and upgrade your plan</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Subscription & Plans</h1>
+          <p className="text-gray-600 mt-2">Manage your subscription and upgrade your plan</p>
+        </div>
+        {subscription?.subscription_status === 'active' && subscription.stripe_customer_id && (
+          <button
+            onClick={handleManageBilling}
+            disabled={loadingPortal}
+            className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors shadow-sm"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+            {loadingPortal ? 'Loading...' : 'Manage Billing'}
+          </button>
+        )}
       </div>
 
       {/* Current Plan */}
@@ -269,9 +321,17 @@ export default function SubscriptionPage() {
           </div>
         )}
 
-        {/* Cancel Subscription Button */}
+        {/* Manage Subscription Options */}
         {subscription?.subscription_status === 'active' && subscription.stripe_subscription_id && (
           <div className="mt-6 pt-6 border-t border-gray-200">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-blue-800 font-medium mb-2">
+                💡 <strong>Manage Your Subscription:</strong>
+              </p>
+              <p className="text-sm text-blue-700">
+                Use the "Manage Billing" button above to access Stripe Customer Portal where you can update payment methods, view invoices, cancel subscription, and more.
+              </p>
+            </div>
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
               <p className="text-sm text-yellow-800">
                 <strong>Note:</strong> Cancelling your subscription will stop automatic renewals. 
