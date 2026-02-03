@@ -3235,9 +3235,9 @@ app.post('/whatsapp/webhook', async (req, res) => {
       }
     } else {
       // Setting is OFF - only sync if contact already exists
-      // Try to find existing contact by phone
+      // Try to find existing contact by phone using proper locationId filter
       try {
-        const searchRes = await makeGHLRequest(`${BASE}/contacts/search?phone=${encodeURIComponent(phone)}`, {
+        const searchRes = await makeGHLRequest(`${BASE}/contacts/search?locationId=${locationId}&phone=${encodeURIComponent(phone)}`, {
           method: 'GET',
           headers: {
             Authorization: `Bearer ${validToken}`,
@@ -3248,12 +3248,19 @@ app.post('/whatsapp/webhook', async (req, res) => {
         
         if (searchRes.ok) {
           const searchData = await searchRes.json();
+          console.log(`🔍 Contact search result for ${phone}:`, searchData);
           if (searchData.contacts && searchData.contacts.length > 0) {
             // Contact exists - use it
             contactId = searchData.contacts[0].id;
+            console.log(`✅ Found existing contact: ${contactId}`);
+          } else {
+            console.log(`⚠️ Contact not found in GHL for ${phone}`);
           }
+        } else {
+          console.log(`❌ Contact search failed:`, searchRes.status, searchRes.statusText);
         }
       } catch (searchError) {
+        console.error('Contact search error:', searchError);
         // Silent fail - if search fails, contact doesn't exist
       }
     }

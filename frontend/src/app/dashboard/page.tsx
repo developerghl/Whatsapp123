@@ -21,6 +21,9 @@ interface SubaccountStatus {
   phone_number?: string
   qr?: string
   created_at?: string
+  total_messages_sent?: number
+  total_messages_received?: number
+  last_activity_at?: string
 }
 
 export default function Dashboard() {
@@ -105,6 +108,18 @@ export default function Dashboard() {
               if (sessionResponse.ok) {
                 sessionData = await sessionResponse.json()
               }
+
+              // Fetch analytics for this account
+              let analytics = { total_messages_sent: 0, total_messages_received: 0, last_activity_at: null }
+              try {
+                const analyticsRes = await apiCall(API_ENDPOINTS.getSubaccountAnalytics(ghlAccount.id))
+                if (analyticsRes.ok) {
+                  const analyticsData = await analyticsRes.json()
+                  analytics = analyticsData.analytics || analytics
+                }
+              } catch (e) {
+                // Silent fail for analytics
+              }
               
               return {
                 id: ghlAccount.id,
@@ -113,7 +128,10 @@ export default function Dashboard() {
                 status: (sessionData.status as 'initializing' | 'qr' | 'ready' | 'disconnected' | 'none') || 'none',
                 phone_number: sessionData.phone_number || undefined,
                 qr: sessionData.qr || undefined,
-                created_at: ghlAccount.created_at
+                created_at: ghlAccount.created_at,
+                total_messages_sent: analytics.total_messages_sent || 0,
+                total_messages_received: analytics.total_messages_received || 0,
+                last_activity_at: analytics.last_activity_at || undefined
               }
             } catch (error) {
               console.error('Error fetching session status:', error)
@@ -602,75 +620,190 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Header Stats - reference style */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="rounded-2xl p-6 border border-transparent bg-gradient-to-br from-emerald-50 to-white shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Accounts</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">{subaccountStatuses.length}</p>
+      {/* Modern Analytics Cards - 3D Style */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Total Subaccounts Card */}
+        <div className="group relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity"></div>
+          <div className="relative bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-blue-200">
+            <div className="flex items-start justify-between mb-4">
+              <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
             </div>
-            <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
+            <div>
+              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Subaccounts</p>
+              <p className="text-4xl font-bold text-gray-900 mt-2">{subaccountStatuses.length}</p>
+              <p className="text-xs text-gray-400 mt-2">
+                {userSubscription?.maxSubaccounts && `${subaccountStatuses.length}/${userSubscription.maxSubaccounts} used`}
+              </p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl p-6 border border-transparent bg-gradient-to-br from-green-50 to-white shadow-sm">
-          <div className="flex items-center justify-between">
+        {/* Connected Accounts Card */}
+        <div className="group relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-green-400 to-emerald-600 rounded-2xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity"></div>
+          <div className="relative bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-green-200">
+            <div className="flex items-start justify-between mb-4">
+              <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
             <div>
-              <p className="text-sm font-medium text-gray-600">Connected</p>
-              <p className="text-3xl font-bold text-green-600 mt-1">
+              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Active Connections</p>
+              <p className="text-4xl font-bold text-green-600 mt-2">
                 {subaccountStatuses.filter(a => a.status === 'ready').length}
               </p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <p className="text-xs text-green-600 mt-2 flex items-center">
+                <span className="w-2 h-2 bg-green-500 rounded-full mr-1.5 animate-pulse"></span>
+                Live & ready
+              </p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl p-6 border border-transparent bg-gradient-to-br from-yellow-50 to-white shadow-sm">
-          <div className="flex items-center justify-between">
+        {/* Pending Connections Card */}
+        <div className="group relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-400 to-orange-600 rounded-2xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity"></div>
+          <div className="relative bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-amber-200">
+            <div className="flex items-start justify-between mb-4">
+              <div className="p-3 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
             <div>
-              <p className="text-sm font-medium text-gray-600">Pending</p>
-              <p className="text-3xl font-bold text-yellow-600 mt-1">
+              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Pending Setup</p>
+              <p className="text-4xl font-bold text-amber-600 mt-2">
                 {subaccountStatuses.filter(a => a.status === 'qr' || a.status === 'initializing').length}
               </p>
-            </div>
-            <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+              <p className="text-xs text-amber-600 mt-2">Awaiting connection</p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-2xl p-6 border border-transparent bg-gradient-to-br from-rose-50 to-white shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Disconnected</p>
-              <p className="text-3xl font-bold text-red-600 mt-1">
-                {subaccountStatuses.filter(a => a.status === 'disconnected' || a.status === 'none').length}
-              </p>
+        {/* Messages Sent Card */}
+        <div className="group relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-400 to-indigo-600 rounded-2xl blur-xl opacity-20 group-hover:opacity-30 transition-opacity"></div>
+          <div className="relative bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 hover:border-purple-200">
+            <div className="flex items-start justify-between mb-4">
+              <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl shadow-lg">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
             </div>
-            <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+            <div>
+              <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Messages</p>
+              <p className="text-4xl font-bold text-purple-600 mt-2">
+                {subaccountStatuses.reduce((sum, acc) => sum + ((acc as any).total_messages_sent || 0), 0).toLocaleString()}
+              </p>
+              <p className="text-xs text-gray-400 mt-2">Across all accounts</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Optional analytics row removed per request */}
+      {/* Performance Overview - Modern Dark Card */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-8 shadow-2xl border border-slate-700">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Performance</h2>
+            <p className="text-slate-400 text-sm mt-1">Real-time connection status</p>
+          </div>
+          <button className="p-2 hover:bg-slate-700 rounded-lg transition-colors">
+            <svg className="w-5 h-5 text-slate-400" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+            </svg>
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <div className="flex items-center space-x-3 mb-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+              <p className="text-slate-300 text-sm font-medium">Active Rate</p>
+            </div>
+            <p className="text-5xl font-bold text-white">
+              {subaccountStatuses.length > 0 
+                ? Math.round((subaccountStatuses.filter(a => a.status === 'ready').length / subaccountStatuses.length) * 100)
+                : 0}%
+            </p>
+            <p className="text-slate-400 text-xs mt-1">Connections ready</p>
+          </div>
+          <div>
+            <div className="flex items-center space-x-3 mb-2">
+              <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+              <p className="text-slate-300 text-sm font-medium">Pending</p>
+            </div>
+            <p className="text-5xl font-bold text-white">
+              {Math.round((subaccountStatuses.filter(a => a.status !== 'ready').length / Math.max(subaccountStatuses.length, 1)) * 100)}%
+            </p>
+            <p className="text-slate-400 text-xs mt-1">Needs attention</p>
+          </div>
+        </div>
+        
+        {/* Status Pills */}
+        <div className="mt-6 pt-6 border-t border-slate-700">
+          <div className="flex flex-wrap gap-3">
+            <div className="flex items-center space-x-2 px-4 py-2 bg-green-500/10 rounded-lg border border-green-500/20">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-green-400 text-sm font-medium">Connected</span>
+              <span className="text-white font-bold">{subaccountStatuses.filter(a => a.status === 'ready').length}</span>
+            </div>
+            <div className="flex items-center space-x-2 px-4 py-2 bg-amber-500/10 rounded-lg border border-amber-500/20">
+              <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+              <span className="text-amber-400 text-sm font-medium">Pending QR</span>
+              <span className="text-white font-bold">{subaccountStatuses.filter(a => a.status === 'qr').length}</span>
+            </div>
+            <div className="flex items-center space-x-2 px-4 py-2 bg-red-500/10 rounded-lg border border-red-500/20">
+              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+              <span className="text-red-400 text-sm font-medium">Disconnected</span>
+              <span className="text-white font-bold">{subaccountStatuses.filter(a => a.status === 'disconnected').length}</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      {/* Main Table Card */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-200">
+      {/* Quick Actions Bar */}
+      <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-2xl p-6 shadow-xl">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
+              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div className="text-white">
+              <h3 className="text-xl font-bold">Quick Actions</h3>
+              <p className="text-sm text-white/80">Manage your WhatsApp connections</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => window.location.href = '/dashboard/add-subaccount'}
+              className="px-6 py-3 bg-white text-indigo-600 font-semibold rounded-xl hover:bg-gray-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+            >
+              + Add Subaccount
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-6 py-3 bg-white/10 backdrop-blur-sm text-white font-medium rounded-xl hover:bg-white/20 transition-all duration-200 border border-white/20 disabled:opacity-50"
+            >
+              {refreshing ? '↻ Refreshing...' : '↻ Refresh'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Table Card - Modernized */}
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
         {/* Table Header */}
         <div className="px-6 py-5 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
@@ -756,21 +889,24 @@ export default function Dashboard() {
           <>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 rounded-xl overflow-hidden">
-                <thead className="bg-gray-50">
+                <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                       Location
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Phone Number
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      WhatsApp Number
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      Messages
                     </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      Last Activity
+                    </th>
+                    <th className="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -779,84 +915,112 @@ export default function Dashboard() {
                   {currentAccounts.map((account) => {
                     const statusBadge = getStatusBadge(account.status)
                     return (
-                      <tr key={account.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                              <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                      <tr key={account.id} className="hover:bg-gradient-to-r hover:from-gray-50 hover:to-white transition-all duration-200 group border-b border-gray-50">
+                        <td className="px-6 py-5">
+                          <div className="flex items-center space-x-4">
+                            <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+                              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0020.885 3.488"/>
                               </svg>
                             </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">{account.name}</div>
-                              <div className="text-sm text-gray-500">{account.ghl_location_id}</div>
+                            <div>
+                              <div className="text-sm font-bold text-gray-900">{account.ghl_location_id}</div>
+                              <div className="text-xs text-gray-500 mt-0.5">GHL Location</div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {account.phone_number || (
-                              <span className="text-gray-400 italic">Not connected</span>
-                            )}
-                          </div>
+                        <td className="px-6 py-5">
+                          {account.phone_number ? (
+                            <div className="flex items-center space-x-2">
+                              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                              <span className="text-sm font-semibold text-gray-900 font-mono">{account.phone_number}</span>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-400 italic">Not connected</span>
+                          )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadge.color}`}>
-                            <span className="mr-1">{statusBadge.icon}</span>
+                        <td className="px-6 py-5">
+                          <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-bold ${statusBadge.color} shadow-sm`}>
+                            <span className="mr-1.5">{statusBadge.icon}</span>
                             {statusBadge.text}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {account.created_at ? new Date(account.created_at).toLocaleDateString() : 'N/A'}
+                        <td className="px-6 py-5">
+                          <div className="flex items-center space-x-4">
+                            <div className="text-center px-3 py-2 bg-purple-50 rounded-lg border border-purple-100">
+                              <p className="text-lg font-bold text-purple-600">{account.total_messages_sent || 0}</p>
+                              <p className="text-xs text-purple-500 font-medium">Sent</p>
+                            </div>
+                            <div className="text-center px-3 py-2 bg-indigo-50 rounded-lg border border-indigo-100">
+                              <p className="text-lg font-bold text-indigo-600">{account.total_messages_received || 0}</p>
+                              <p className="text-xs text-indigo-500 font-medium">Received</p>
+                            </div>
+                          </div>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <td className="px-6 py-5">
+                          <div className="text-sm text-gray-600">
+                            {account.last_activity_at 
+                              ? (
+                                <div>
+                                  <div className="font-medium text-gray-900">{new Date(account.last_activity_at).toLocaleDateString()}</div>
+                                  <div className="text-xs text-gray-500">{new Date(account.last_activity_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</div>
+                                </div>
+                              )
+                              : account.created_at 
+                                ? new Date(account.created_at).toLocaleDateString()
+                                : 'N/A'
+                            }
+                          </div>
+                        </td>
+                        <td className="px-6 py-5">
                           <div className="flex items-center justify-end space-x-2">
                             <button
                               onClick={() => setSettingsModal({ open: true, ghlAccountId: account.id, locationId: account.ghl_location_id })}
-                              className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                              className="p-2.5 bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-gray-700 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
                               title="Settings"
                             >
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                               </svg>
                             </button>
                             <button
                               onClick={() => openQR(account.ghl_location_id)}
-                              className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 transition-colors"
+                              className="px-4 py-2.5 bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-xs font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
                             >
-                              <svg className="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                              </svg>
-                              QR Code
+                              <div className="flex items-center space-x-1.5">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                </svg>
+                                <span>QR Code</span>
+                              </div>
                             </button>
                             <button
                               onClick={() => resetSession(account.ghl_location_id)}
-                              className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-                              title="Reset Session (Delete from database)"
+                              className="p-2.5 bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 text-gray-700 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+                              title="Reset Session"
                             >
-                              <svg className="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                               </svg>
-                              Reset
                             </button>
                             {account.status === 'ready' && (
                               <button
                                 onClick={() => logoutSession(account.ghl_location_id)}
-                                className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-                                title="Logout Session (Disconnect from mobile)"
+                                className="p-2.5 bg-gradient-to-br from-orange-100 to-orange-200 hover:from-orange-200 hover:to-orange-300 text-orange-700 rounded-xl transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+                                title="Logout Session"
                               >
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                                 </svg>
                               </button>
                             )}
                             <button
                               onClick={() => deleteSubaccount(account.ghl_location_id)}
-                              className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-red-600 hover:bg-red-700 transition-colors"
+                              className="p-2.5 bg-gradient-to-br from-red-100 to-red-200 hover:from-red-500 hover:to-red-600 text-red-700 hover:text-white rounded-xl transition-all duration-200 shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
                               title="Delete Account"
                             >
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                               </svg>
                             </button>
@@ -869,32 +1033,32 @@ export default function Dashboard() {
               </table>
             </div>
 
-            {/* Pagination */}
+            {/* Modern Pagination */}
             {totalPages > 1 && (
-              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <div className="px-6 py-5 border-t border-gray-100 bg-gradient-to-r from-gray-50 to-white">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-700">
-                    Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
-                    <span className="font-medium">{Math.min(endIndex, filteredAccounts.length)}</span> of{' '}
-                    <span className="font-medium">{filteredAccounts.length}</span> results
+                  <div className="text-sm text-gray-600 font-medium">
+                    Showing <span className="font-bold text-gray-900">{startIndex + 1}</span> to{' '}
+                    <span className="font-bold text-gray-900">{Math.min(endIndex, filteredAccounts.length)}</span> of{' '}
+                    <span className="font-bold text-gray-900">{filteredAccounts.length}</span> accounts
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                       disabled={currentPage === 1}
-                      className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
                     >
-                      Previous
+                      ← Previous
                     </button>
                     <div className="flex items-center space-x-1">
                       {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                         <button
                           key={page}
                           onClick={() => setCurrentPage(page)}
-                          className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                          className={`min-w-[40px] px-3 py-2 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-md ${
                             currentPage === page
-                              ? 'bg-indigo-600 text-white'
-                              : 'text-gray-700 hover:bg-gray-100'
+                              ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg'
+                              : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
                           }`}
                         >
                           {page}
@@ -904,9 +1068,9 @@ export default function Dashboard() {
                     <button
                       onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                       disabled={currentPage === totalPages}
-                      className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
                     >
-                      Next
+                      Next →
                     </button>
                   </div>
                 </div>
@@ -914,17 +1078,22 @@ export default function Dashboard() {
             )}
           </>
         ) : (
-          <div className="px-6 py-16 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-              </svg>
+          <div className="px-6 py-20 text-center">
+            <div className="relative mb-6">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-24 h-24 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full blur-2xl opacity-50"></div>
+              </div>
+              <div className="relative w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto shadow-xl transform rotate-3 hover:rotate-0 transition-transform">
+                <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                </svg>
+              </div>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No accounts found</h3>
-            <p className="text-gray-500 mb-6">
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">No accounts found</h3>
+            <p className="text-gray-500 mb-8 max-w-md mx-auto">
               {searchQuery || filterStatus !== 'all'
                 ? 'Try adjusting your search or filter to find what you\'re looking for.'
-                : 'Get started by connecting your first GoHighLevel account.'}
+                : 'Get started by connecting your first GoHighLevel account to unlock WhatsApp automation.'}
             </p>
             {!searchQuery && filterStatus === 'all' && (
               <button
@@ -936,7 +1105,7 @@ export default function Dashboard() {
                   }
                 }}
                 disabled={isTrialExpired()}
-                className="inline-flex items-center px-6 py-3 border border-transparent rounded-lg text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-base font-bold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 title={isTrialExpired() ? 'Your subscription has expired. Please upgrade to add accounts.' : ''}
               >
                 <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
