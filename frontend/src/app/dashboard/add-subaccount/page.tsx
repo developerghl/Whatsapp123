@@ -170,21 +170,27 @@ export default function AddSubAccount() {
   const expired = isExpired()
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="space-y-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Add Subaccount</h1>
+        <p className="text-gray-600 mt-1">Connect your GoHighLevel location to start using WhatsApp</p>
+      </div>
+
       {expired && (
-        <div className="mb-6 rounded-lg bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 p-4 shadow-sm">
+        <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-2xl border border-red-200 p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-red-900">
+              <h3 className="text-lg font-semibold text-red-900 mb-1">
                 ⚠️ Your trial has expired
               </h3>
-              <p className="text-sm text-red-700 mt-1">
+              <p className="text-sm text-red-700">
                 Please upgrade your subscription to add accounts and continue using WhatsApp Integration.
               </p>
             </div>
             <button
               onClick={() => router.push('/dashboard/subscription')}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 transition-colors"
+              className="inline-flex items-center px-5 py-2.5 border border-transparent text-sm font-semibold rounded-xl text-white bg-red-600 hover:bg-red-700 transition-all shadow-sm hover:shadow-md"
             >
               Upgrade Now
             </button>
@@ -192,100 +198,130 @@ export default function AddSubAccount() {
         </div>
       )}
       
-      <div className="bg-white shadow rounded-lg p-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Add GHL Account</h2>
-        <p className="text-gray-600 mb-8">Connect your GoHighLevel location to start using WhatsApp</p>
-        
-        <div className="text-center">
-          {/* Single Location Option */}
-          <div className="border-2 border-blue-200 rounded-lg p-8 hover:border-blue-400 transition-colors">
-            <div className="flex items-center justify-center w-20 h-20 bg-blue-100 rounded-full mx-auto mb-6">
-              <svg className="w-10 h-10 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            
-            <h3 className="text-2xl font-semibold text-gray-900 text-center mb-4">📍 Connect Location</h3>
-            <p className="text-gray-600 text-center mb-6">
-              Connect your GoHighLevel location to enable WhatsApp integration
-            </p>
-            
-            {/* Show limit warning if reached */}
-            {subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new && (
-              <div className="mb-6 rounded-lg bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 p-4 shadow-sm">
-                <div className="flex items-start">
-                  <div className="flex-shrink-0">
+      {/* Connection Card - Modern Minimal */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-8 hover:shadow-lg transition-all duration-300">
+        <div className="text-center max-w-lg mx-auto">
+          {/* Icon */}
+          <div className="flex items-center justify-center w-20 h-20 bg-indigo-100 rounded-2xl mx-auto mb-6 shadow-sm">
+            <svg className="w-10 h-10 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">Connect Location</h2>
+          <p className="text-gray-600 mb-8">
+            Connect your GoHighLevel location to enable WhatsApp integration
+          </p>
+          
+          {/* Limit Warning */}
+          {subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new && (
+            <div className="mb-6 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl border border-yellow-200 p-5">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
                     <svg className="h-5 w-5 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                     </svg>
                   </div>
-                  <div className="ml-3 flex-1">
-                    <h3 className="text-sm font-medium text-yellow-800">
-                      Subaccount Limit Reached
-                    </h3>
-                    <div className="mt-2 text-sm text-yellow-700">
+                </div>
+                <div className="ml-4 flex-1">
+                  <h3 className="text-sm font-semibold text-yellow-900 mb-1">
+                    Subaccount Limit Reached
+                  </h3>
+                  <div className="text-sm text-yellow-800">
+                    <p className="mb-1">
+                      You&apos;re currently using {subscriptionInfo.current_subaccounts} of {subscriptionInfo.max_subaccounts} subaccounts.
+                    </p>
+                    {subscriptionInfo.previously_owned_locations && subscriptionInfo.previously_owned_locations.length > 0 ? (
                       <p>
-                        You&apos;re currently using {subscriptionInfo.current_subaccounts} of {subscriptionInfo.max_subaccounts} subaccounts.
+                        You can only re-add one of your {subscriptionInfo.previously_owned_locations.length} previously owned location(s), or purchase an additional subaccount for $4 (Professional Plan only).
                       </p>
-                      {subscriptionInfo.previously_owned_locations && subscriptionInfo.previously_owned_locations.length > 0 ? (
-                        <p className="mt-1">
-                          You can only re-add one of your {subscriptionInfo.previously_owned_locations.length} previously owned location(s), or purchase an additional subaccount for $4 (Professional Plan only).
-                        </p>
-                      ) : subscriptionInfo.subscription_status === 'active' ? (
-                        <p className="mt-1">
-                          Please go back to the dashboard to purchase an additional subaccount for $4 (Professional Plan only).
-                        </p>
-                      ) : (
-                        <p className="mt-1">
-                          Please upgrade your subscription to add more locations.
-                        </p>
-                      )}
-                    </div>
+                    ) : subscriptionInfo.subscription_status === 'active' ? (
+                      <p>
+                        Please go back to the dashboard to purchase an additional subaccount for $4 (Professional Plan only).
+                      </p>
+                    ) : (
+                      <p>
+                        Please upgrade your subscription to add more locations.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
-            )}
-            
-            <div className="bg-blue-50 rounded-md p-4 mb-6">
-              <p className="text-sm text-blue-800 font-medium mb-2">✨ What you get:</p>
-              <ul className="text-sm text-blue-700 space-y-1">
-                <li>• WhatsApp QR code generation</li>
-                <li>• Send and receive messages</li>
-                <li>• Manage conversations</li>
-                <li>• Real-time message sync</li>
-              </ul>
             </div>
-            
-            {subscriptionInfo && (
-              <div className="mb-6 text-sm text-gray-600 text-center">
-                <span className="font-medium">Subaccounts:</span> {subscriptionInfo.current_subaccounts} / {subscriptionInfo.max_subaccounts}
-              </div>
-            )}
-            
-            <button
-              onClick={handleConnect}
-              disabled={loading || expired || (subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new)}
-              className="w-full bg-blue-600 text-white py-4 px-6 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all text-lg"
-              title={
-                expired 
-                  ? 'Your trial has expired. Please upgrade to add accounts.'
-                  : subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new
-                  ? 'You have reached your subaccount limit. You can only re-add previously owned locations or purchase an additional subaccount.'
-                  : ''
-              }
-            >
-              {loading ? (
-                <span className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Connecting...
-                </span>
-              ) : '📍 Connect Location'}
-            </button>
+          )}
+          
+          {/* Features */}
+          <div className="bg-indigo-50 rounded-xl p-6 mb-8 border border-indigo-100">
+            <p className="text-sm font-semibold text-indigo-900 mb-3">✨ What you get:</p>
+            <ul className="text-sm text-indigo-800 space-y-2 text-left">
+              <li className="flex items-center">
+                <svg className="w-5 h-5 text-indigo-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                WhatsApp QR code generation
+              </li>
+              <li className="flex items-center">
+                <svg className="w-5 h-5 text-indigo-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                Send and receive messages
+              </li>
+              <li className="flex items-center">
+                <svg className="w-5 h-5 text-indigo-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                Manage conversations
+              </li>
+              <li className="flex items-center">
+                <svg className="w-5 h-5 text-indigo-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                Real-time message sync
+              </li>
+            </ul>
           </div>
+          
+          {/* Subaccount Count */}
+          {subscriptionInfo && (
+            <div className="mb-8 inline-flex items-center px-4 py-2 bg-gray-50 rounded-xl border border-gray-200">
+              <span className="text-sm font-medium text-gray-700">Subaccounts:</span>
+              <span className="ml-2 text-sm font-bold text-gray-900">{subscriptionInfo.current_subaccounts} / {subscriptionInfo.max_subaccounts}</span>
+            </div>
+          )}
+          
+          {/* Connect Button */}
+          <button
+            onClick={handleConnect}
+            disabled={loading || expired || (subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new)}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 px-6 rounded-xl font-semibold text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl"
+            title={
+              expired 
+                ? 'Your trial has expired. Please upgrade to add accounts.'
+                : subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new
+                ? 'You have reached your subaccount limit. You can only re-add previously owned locations or purchase an additional subaccount.'
+                : ''
+            }
+          >
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Connecting...
+              </span>
+            ) : (
+              <span className="flex items-center justify-center">
+                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Connect Location
+              </span>
+            )}
+          </button>
         </div>
       </div>
     </div>

@@ -85,7 +85,7 @@ export default function Modal({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-md" />
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
         </Transition.Child>
 
         <div className="fixed inset-0 overflow-y-auto">
@@ -99,39 +99,39 @@ export default function Modal({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-xl bg-white ring-1 ring-gray-200 text-left align-middle shadow-lg transition-all">
-                <div className="p-6">
+              <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-white border border-gray-200 text-left align-middle shadow-2xl transition-all">
+                <div className="p-8">
                   <div className="flex items-start">
-                    <div className={`flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-full ${config.bg}`}>
+                    <div className={`flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-xl ${config.bg} shadow-sm`}>
                       <div className={config.text}>
                         {config.icon}
                       </div>
                     </div>
                     <div className="ml-4 text-left flex-1">
-                      <Dialog.Title as="h3" className="text-[15px] font-semibold text-gray-900">
+                      <Dialog.Title as="h3" className="text-lg font-bold text-gray-900">
                         {title}
                       </Dialog.Title>
-                      <div className="mt-2 text-sm text-gray-600">
+                      <div className="mt-3 text-sm text-gray-600 leading-relaxed">
                         {children}
                       </div>
                     </div>
                     <button
                       type="button"
                       onClick={onClose}
-                      className="ml-3 inline-flex items-center justify-center h-8 w-8 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                      className="ml-3 inline-flex items-center justify-center h-8 w-8 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
                       aria-label="Close"
                     >
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
                   </div>
 
-                  <div className="mt-6 flex justify-end space-x-3">
+                  <div className="mt-8 flex justify-end space-x-3">
                     <button
                       type="button"
                       disabled={loading}
-                      className="inline-flex justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+                      className="inline-flex justify-center rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 transition-all duration-200"
                       onClick={onClose}
                     >
                       {cancelText}
@@ -140,7 +140,7 @@ export default function Modal({
                       <button
                         type="button"
                         disabled={loading}
-                        className={`inline-flex justify-center items-center rounded-lg border border-transparent px-4 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 transition-colors ${
+                        className={`inline-flex justify-center items-center rounded-xl border border-transparent px-5 py-2.5 text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 transition-all duration-200 shadow-sm hover:shadow-md ${
                           icon === 'danger'
                             ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
                             : 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500'
