@@ -366,6 +366,7 @@ export default function SubaccountSettingsModal({
           </>
         )}
                 </div>
+              </div>
               </Dialog.Panel>
             </Transition.Child>
           </div>

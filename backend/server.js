@@ -1,4 +1,16 @@
-﻿const express = require('express');
+﻿// Suppress Node.js deprecation warnings from dependencies
+// These warnings come from third-party packages (like Baileys) and don't affect functionality
+process.removeAllListeners('warning');
+process.on('warning', (warning) => {
+  // Only suppress DEP0169 (url.parse deprecation) - allow other warnings
+  if (warning.name === 'DeprecationWarning' && warning.message.includes('url.parse()')) {
+    return; // Suppress this specific warning
+  }
+  // Log other warnings normally
+  console.warn(warning.name, warning.message);
+});
+
+const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
