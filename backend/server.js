@@ -6220,26 +6220,27 @@ app.post('/api/stripe/customer-portal', requireAuth, async (req, res) => {
     }
 
     const userId = req.user.id;
-    const { customer_id } = req.body;
 
-    if (!customer_id) {
-      return res.status(400).json({ error: 'Customer ID is required' });
-    }
-
-    // Verify customer belongs to user
-    const { data: user } = await supabaseAdmin
+    // Get user's stripe_customer_id from database
+    const { data: user, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, stripe_customer_id')
+      .select('id, stripe_customer_id, email')
       .eq('id', userId)
       .single();
 
-    if (!user) {
+    if (userError || !user) {
+      console.error('❌ User not found:', userError);
       return res.status(404).json({ error: 'User not found' });
     }
 
-    if (user.stripe_customer_id !== customer_id) {
-      return res.status(403).json({ error: 'Customer does not belong to this user' });
+    if (!user.stripe_customer_id) {
+      return res.status(400).json({ 
+        error: 'No Stripe customer found',
+        details: 'You need to subscribe to a plan first before managing billing.' 
+      });
     }
+
+    const customer_id = user.stripe_customer_id;
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://whatsappghl.vercel.app';
 

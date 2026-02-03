@@ -21,9 +21,7 @@ export default function SubscriptionPage() {
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
   const [loading, setLoading] = useState(true)
   const [upgrading, setUpgrading] = useState<string | null>(null)
-  const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
   const [loadingPortal, setLoadingPortal] = useState(false)
 
   const fetchSubscription = useCallback(async () => {
@@ -112,63 +110,20 @@ export default function SubscriptionPage() {
     }
   }
 
-  const handleCancel = async () => {
-    if (!user?.id || !subscription?.stripe_subscription_id) {
-      setError('No active subscription to cancel')
-      return
-    }
-
-    if (!confirm('Are you sure you want to cancel your subscription? You will retain access until the end of your current billing period.')) {
-      return
-    }
-
-    setCancelling(true)
-    setError(null)
-    setSuccess(null)
-
-    try {
-      const response = await apiCall(API_ENDPOINTS.cancelSubscription, {
-        method: 'POST',
-        body: JSON.stringify({
-          subscription_id: subscription.stripe_subscription_id
-        })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to cancel subscription' }))
-        throw new Error(errorData.error || 'Failed to cancel subscription')
-      }
-
-      setSuccess('Subscription cancelled successfully. You will retain access until the end of your billing period.')
-      
-      // Refresh subscription data
-      setTimeout(() => {
-        fetchSubscription()
-      }, 2000)
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to cancel subscription'
-      setError(errorMessage)
-    } finally {
-      setCancelling(false)
-    }
-  }
 
   const handleManageBilling = async () => {
-    if (!user?.id || !subscription?.stripe_customer_id) {
-      setError('No active subscription found. Please ensure you have a Stripe customer ID.')
+    if (!user?.id) {
+      setError('Please login to continue.')
       return
     }
 
     setLoadingPortal(true)
     setError(null)
-    setSuccess(null)
 
     try {
       const response = await apiCall(API_ENDPOINTS.customerPortal, {
         method: 'POST',
-        body: JSON.stringify({
-          customer_id: subscription.stripe_customer_id
-        })
+        body: JSON.stringify({})
       })
 
       if (!response.ok) {
@@ -179,10 +134,19 @@ export default function SubscriptionPage() {
           errorData = { error: 'Failed to create billing portal session' }
         }
         
-        // Show user-friendly error message
-        const errorMessage = errorData.details 
-          ? errorData.error || 'Unable to open billing portal'
-          : errorData.error || 'Failed to open billing portal. Please try again later.'
+        // Show user-friendly error message with details
+        let errorMessage = errorData.error || 'Failed to open billing portal'
+        
+        // Add helpful details if available
+        if (errorData.details) {
+          if (errorData.details.includes('Customer Portal') || errorData.details.includes('billing portal')) {
+            errorMessage = 'Billing portal is not configured. Please contact support.'
+          } else if (errorData.details.includes('customer not found') || errorData.details.includes('does not exist')) {
+            errorMessage = 'Your account is not linked to a billing account. Please complete a subscription purchase first.'
+          } else {
+            errorMessage = errorData.error || 'Unable to open billing portal'
+          }
+        }
         
         throw new Error(errorMessage)
       }
@@ -327,42 +291,30 @@ export default function SubscriptionPage() {
           </div>
         )}
 
-        {/* Error/Success Messages */}
+        {/* Error Messages */}
         {error && (
           <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-sm text-red-800">{error}</p>
           </div>
         )}
-        {success && (
-          <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
-            <p className="text-sm text-green-800">{success}</p>
-          </div>
-        )}
 
-        {/* Manage Subscription Options */}
-        {subscription?.subscription_status === 'active' && subscription.stripe_subscription_id && (
+        {/* Manage Subscription Info */}
+        {subscription?.subscription_status === 'active' && subscription.stripe_customer_id && (
           <div className="mt-6 pt-6 border-t border-gray-200">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-800 font-medium mb-2">
                 💡 <strong>Manage Your Subscription:</strong>
               </p>
               <p className="text-sm text-blue-700">
-                Use the &quot;Manage Billing&quot; button above to access Stripe Customer Portal where you can update payment methods, view invoices, cancel subscription, and more.
+                Use the &quot;Manage Billing&quot; button above to access your billing portal where you can:
               </p>
+              <ul className="text-sm text-blue-700 mt-2 ml-4 list-disc">
+                <li>Update payment methods</li>
+                <li>View and download invoices</li>
+                <li>Update billing information</li>
+                <li>Cancel your subscription</li>
+              </ul>
             </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-              <p className="text-sm text-yellow-800">
-                <strong>Note:</strong> Cancelling your subscription will stop automatic renewals. 
-                You will retain full access until the end of your current billing period.
-              </p>
-            </div>
-            <button
-              onClick={handleCancel}
-              disabled={cancelling}
-              className="w-full py-3 px-4 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
-            >
-              {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
-            </button>
           </div>
         )}
       </div>
