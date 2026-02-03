@@ -38,10 +38,7 @@ export default function SubscriptionPage() {
         .single()
 
       if (!error && data) {
-        console.log('📊 Subscription data fetched:', data)
         setSubscription(data)
-      } else if (error) {
-        console.error('❌ Error fetching subscription:', error)
       }
     } catch (error) {
       console.error('Error fetching subscription:', error)
@@ -158,12 +155,13 @@ export default function SubscriptionPage() {
 
   const handleManageBilling = async () => {
     if (!user?.id || !subscription?.stripe_customer_id) {
-      setError('No active subscription found')
+      setError('No active subscription found. Please ensure you have a Stripe customer ID.')
       return
     }
 
     setLoadingPortal(true)
     setError(null)
+    setSuccess(null)
 
     try {
       const response = await apiCall(API_ENDPOINTS.customerPortal, {
@@ -174,18 +172,30 @@ export default function SubscriptionPage() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to create billing portal session' }))
-        throw new Error(errorData.error || 'Failed to create billing portal session')
+        let errorData
+        try {
+          errorData = await response.json()
+        } catch {
+          errorData = { error: 'Failed to create billing portal session' }
+        }
+        
+        // Show user-friendly error message
+        const errorMessage = errorData.details 
+          ? errorData.error || 'Unable to open billing portal'
+          : errorData.error || 'Failed to open billing portal. Please try again later.'
+        
+        throw new Error(errorMessage)
       }
 
       const data = await response.json()
+      
       if (data.url) {
         window.location.href = data.url
       } else {
-        throw new Error('No portal URL received')
+        throw new Error('Unable to open billing portal. Please try again later.')
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to open billing portal'
+      const errorMessage = err instanceof Error ? err.message : 'Failed to open billing portal. Please try again later.'
       setError(errorMessage)
     } finally {
       setLoadingPortal(false)
@@ -216,12 +226,6 @@ export default function SubscriptionPage() {
           <h1 className="text-3xl font-bold text-gray-900">Subscription & Plans</h1>
           <p className="text-gray-600 mt-2">Manage your subscription and upgrade your plan</p>
         </div>
-        {/* Debug info - remove in production */}
-        {subscription && (
-          <div className="text-xs text-gray-500 mr-4">
-            Status: {subscription.subscription_status} | Customer ID: {subscription.stripe_customer_id ? 'Yes' : 'No'}
-          </div>
-        )}
         {/* Show button for active, trialing, cancelled, trial, or any status with stripe_customer_id */}
         {subscription?.stripe_customer_id && (
           subscription?.subscription_status === 'active' || 

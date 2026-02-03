@@ -6243,22 +6243,58 @@ app.post('/api/stripe/customer-portal', requireAuth, async (req, res) => {
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://whatsappghl.vercel.app';
 
+    // Verify customer exists in Stripe
+    try {
+      const customer = await stripe.customers.retrieve(customer_id);
+      if (customer.deleted) {
+        return res.status(400).json({ 
+          error: 'Customer has been deleted in Stripe',
+          details: 'The Stripe customer associated with this account no longer exists.'
+        });
+      }
+    } catch (stripeError) {
+      console.error('❌ Error retrieving Stripe customer:', stripeError);
+      if (stripeError.code === 'resource_missing') {
+        return res.status(404).json({ 
+          error: 'Stripe customer not found',
+          details: 'The customer ID does not exist in Stripe. Please contact support.'
+        });
+      }
+      throw stripeError; // Re-throw if it's a different error
+    }
+
     // Create customer portal session
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customer_id,
       return_url: `${frontendUrl}/dashboard/subscription`,
     });
 
-    console.log(`✅ Customer portal session created for user ${userId}`);
+    console.log(`✅ Customer portal session created for user ${userId}, customer ${customer_id}`);
 
     res.json({ 
       url: portalSession.url
     });
   } catch (error) {
     console.error('❌ Error creating customer portal session:', error);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Failed to create customer portal session';
+    let errorDetails = error.message;
+    
+    if (error.type === 'StripeInvalidRequestError') {
+      if (error.code === 'resource_missing') {
+        errorMessage = 'Stripe customer not found';
+        errorDetails = 'The customer ID does not exist in Stripe. Please ensure you have completed a checkout process.';
+      } else if (error.message.includes('billing portal')) {
+        errorMessage = 'Stripe Billing Portal not configured';
+        errorDetails = 'Please configure the Customer Portal in your Stripe Dashboard (Settings → Billing → Customer portal).';
+      }
+    }
+    
     res.status(500).json({ 
-      error: 'Failed to create customer portal session',
-      details: error.message
+      error: errorMessage,
+      details: errorDetails,
+      code: error.code || 'unknown_error'
     });
   }
 });
