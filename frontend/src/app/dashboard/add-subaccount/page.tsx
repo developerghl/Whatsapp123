@@ -28,7 +28,7 @@ export default function AddSubAccount() {
   const [checking, setChecking] = useState(true)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
 
-  // Check subscription status and limits
+  // Check subscription status and limits - FAST CHECK FIRST
   useEffect(() => {
     const checkSubscription = async () => {
       if (!user?.id) {
@@ -37,35 +37,44 @@ export default function AddSubAccount() {
       }
 
       try {
-        // Fetch subscription info from backend (includes limits and previously owned locations)
-        const response = await apiCall(API_ENDPOINTS.subscriptionInfo)
-        
-        if (response.ok) {
-          const data = await response.json()
-          setSubscriptionInfo(data)
-          setSubscriptionStatus({
-            status: data.subscription_status || 'trial',
-            trialEndsAt: data.trial_ends_at
-          })
-        } else {
-          // Fallback to direct DB query
-          const { data, error } = await supabase
-            .from('users')
-            .select('subscription_status, trial_ends_at')
-            .eq('id', user.id)
-            .single()
+        // FAST CHECK: Direct DB query first (immediate)
+        const { data: quickData, error: quickError } = await supabase
+          .from('users')
+          .select('subscription_status, trial_ends_at')
+          .eq('id', user.id)
+          .single()
 
-          if (!error && data) {
-            setSubscriptionStatus({
-              status: data.subscription_status || 'trial',
-              trialEndsAt: data.trial_ends_at
-            })
+        if (!quickError && quickData) {
+          // Set status immediately to block button
+          setSubscriptionStatus({
+            status: quickData.subscription_status || 'trial',
+            trialEndsAt: quickData.trial_ends_at
+          })
+          setChecking(false) // Allow button interaction after quick check
+        }
+
+        // Then fetch full subscription info from backend (includes limits)
+        try {
+          const response = await apiCall(API_ENDPOINTS.subscriptionInfo)
+          
+          if (response.ok) {
+            const data = await response.json()
+            setSubscriptionInfo(data)
+            // Update status if different
+            if (data.subscription_status) {
+              setSubscriptionStatus({
+                status: data.subscription_status || 'trial',
+                trialEndsAt: data.trial_ends_at
+              })
+            }
           }
+        } catch (apiError) {
+          console.error('Error fetching subscription info:', apiError)
+          // Keep the quick check status
         }
       } catch (error) {
         console.error('Error checking subscription:', error)
-      } finally {
-        setChecking(false)
+        setChecking(false) // Allow interaction even on error
       }
     }
 
@@ -353,10 +362,12 @@ export default function AddSubAccount() {
           {/* Connect Button */}
           <button
             onClick={paymentRequired ? () => setShowPaymentModal(true) : handleConnect}
-            disabled={loading || expired || paymentRequired || (subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new)}
+            disabled={checking || loading || expired || paymentRequired || (subscriptionInfo?.limit_reached && !subscriptionInfo.can_add_new)}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-4 px-6 rounded-xl font-semibold text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg hover:shadow-xl"
             title={
-              paymentRequired
+              checking
+                ? 'Checking subscription status...'
+                : paymentRequired
                 ? 'Payment required. Please renew your subscription to add accounts.'
                 : expired 
                 ? 'Your trial has expired. Please upgrade to add accounts.'
@@ -372,6 +383,14 @@ export default function AddSubAccount() {
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 Connecting...
+              </span>
+            ) : checking ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Checking...
               </span>
             ) : (
               <span className="flex items-center justify-center">

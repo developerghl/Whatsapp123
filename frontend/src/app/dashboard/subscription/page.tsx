@@ -198,22 +198,23 @@ export default function SubscriptionPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header - Modern */}
-      <div className="flex items-center justify-between">
+      {/* Header - Stripe Style */}
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Subscription</h1>
-          <p className="text-gray-600 mt-1">Manage your plan and billing</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-1">Subscription</h1>
+          <p className="text-gray-500 text-sm">Manage your plan and billing</p>
         </div>
         {subscription?.stripe_customer_id && (
           subscription?.subscription_status === 'active' || 
           subscription?.subscription_status === 'trialing' || 
           subscription?.subscription_status === 'cancelled' ||
+          subscription?.subscription_status === 'past_due' ||
           subscription?.subscription_status === 'trial'
         ) ? (
           <button
             onClick={handleManageBilling}
             disabled={loadingPortal}
-            className="inline-flex items-center px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:shadow-none"
+            className="inline-flex items-center px-5 py-2.5 bg-white border border-gray-300 hover:border-gray-400 disabled:bg-gray-100 text-gray-700 font-medium rounded-lg transition-all shadow-sm hover:shadow disabled:shadow-none text-sm"
           >
             {loadingPortal ? (
               <>
@@ -225,7 +226,7 @@ export default function SubscriptionPage() {
               </>
             ) : (
               <>
-                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
                 Manage Billing
@@ -235,31 +236,41 @@ export default function SubscriptionPage() {
         ) : null}
       </div>
 
-      {/* Current Plan - Modern Card */}
-      <div className={`rounded-2xl p-8 border transition-all ${
+      {/* Current Plan - Stripe-style Modern Card */}
+      <div className={`rounded-2xl p-8 border-2 transition-all ${
         subscription?.subscription_status === 'expired' 
           ? 'bg-gradient-to-br from-red-50 to-orange-50 border-red-200' 
+          : subscription?.subscription_status === 'cancelled'
+            ? 'bg-gradient-to-br from-gray-50 to-slate-50 border-gray-300'
           : subscription?.subscription_status === 'past_due'
             ? 'bg-gradient-to-br from-orange-50 to-yellow-50 border-orange-200'
-          : 'bg-white border-gray-200 hover:shadow-lg'
+          : 'bg-white border-gray-200 shadow-sm hover:shadow-md'
       }`}>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Current Plan</h2>
           <div className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold shadow-sm ${
             subscription?.subscription_status === 'expired' 
               ? 'bg-red-100 text-red-800' 
+              : subscription?.subscription_status === 'cancelled'
+                ? 'bg-gray-100 text-gray-800'
               : subscription?.subscription_status === 'past_due'
                 ? 'bg-orange-100 text-orange-800'
               : subscription?.subscription_status === 'active' 
                 ? 'bg-green-100 text-green-800' 
+                : (subscription?.subscription_plan === 'starter' || subscription?.subscription_plan === 'professional')
+                ? 'bg-blue-100 text-blue-800'
                 : 'bg-yellow-100 text-yellow-800'
           }`}>
             {subscription?.subscription_status === 'expired' 
               ? 'Expired' 
+              : subscription?.subscription_status === 'cancelled'
+                ? 'Cancelled'
               : subscription?.subscription_status === 'past_due'
                 ? 'Payment Failed'
               : subscription?.subscription_status === 'active' 
                 ? 'Active' 
+                : (subscription?.subscription_plan === 'starter' || subscription?.subscription_plan === 'professional')
+                ? 'Active'
                 : 'Trial'}
           </div>
         </div>
@@ -267,13 +278,16 @@ export default function SubscriptionPage() {
           <div>
             <p className="text-4xl font-bold text-gray-900 mb-2">
               {subscription?.subscription_status === 'expired' ? 'Trial Expired' :
-               subscription?.subscription_plan === 'free' || subscription?.subscription_status === 'trial' ? 'Free Trial' : 
+               subscription?.subscription_plan === 'professional' ? 'Professional Plan' :
                subscription?.subscription_plan === 'starter' ? 'Starter Plan' :
-               subscription?.subscription_plan === 'professional' ? 'Professional Plan' : 'Free'}
+               subscription?.subscription_plan === 'free' || (subscription?.subscription_status === 'trial' && !subscription?.subscription_plan) ? 'Free Trial' : 
+               'Free Trial'}
             </p>
             <p className="text-gray-600 text-lg">
               {subscription?.subscription_status === 'expired' 
                 ? 'Your trial has expired. Upgrade to continue using WhatsApp Integration.'
+                : subscription?.subscription_status === 'cancelled'
+                ? `Access until ${subscription?.subscription_ends_at ? formatDate(subscription.subscription_ends_at) : 'expired'}`
                 : `${subscription?.max_subaccounts} subaccount${subscription?.max_subaccounts !== 1 ? 's' : ''} allowed`}
             </p>
             {subscription?.subscription_status === 'expired' && subscription?.trial_ends_at && (
@@ -404,26 +418,30 @@ export default function SubscriptionPage() {
           </div>
         )}
         
-        {/* Subscription Details */}
-        {subscription && (subscription.subscription_status === 'active' || subscription.subscription_status === 'cancelled' || subscription.subscription_status === 'past_due') && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-bold text-gray-900 mb-4">Subscription Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Subscription Details - Stripe Style Clean */}
+        {subscription && (subscription.subscription_status === 'active' || subscription.subscription_status === 'cancelled' || subscription.subscription_status === 'past_due' || subscription.subscription_status === 'trial') && subscription.subscription_started_at && (
+          <div className="mt-8 pt-8 border-t border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-6">Subscription Details</h3>
+            <dl className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {subscription.subscription_started_at && (
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Started</dt>
+                <div className="space-y-1">
+                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Started</dt>
                   <dd className="text-base font-semibold text-gray-900">{formatDate(subscription.subscription_started_at)}</dd>
                 </div>
               )}
               {subscription.subscription_ends_at && (
-                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
-                    {subscription.subscription_status === 'cancelled' ? 'Access Until' : 'Renews On'}
+                <div className="space-y-1">
+                  <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                    {subscription.subscription_status === 'cancelled' || subscription.subscription_status === 'expired' 
+                      ? 'Access Until' 
+                      : subscription.subscription_status === 'active'
+                      ? 'Renews On'
+                      : 'Expires On'}
                   </dt>
                   <dd className="text-base font-semibold text-gray-900">{formatDate(subscription.subscription_ends_at)}</dd>
                 </div>
               )}
-            </div>
+            </dl>
           </div>
         )}
 
@@ -489,12 +507,24 @@ export default function SubscriptionPage() {
         )}
       </div>
 
-      {/* Available Plans - Modern Design */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-6">Available Plans</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Available Plans - Stripe Style */}
+      <div className="mt-12">
+        <h2 className="text-2xl font-bold text-gray-900 mb-8">Available Plans</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {plans.map((plan, index) => {
-            const isCurrentPlan = subscription?.subscription_plan === plan.name.toLowerCase() || (plan.name === 'Free Trial' && (subscription?.subscription_plan === 'free' || subscription?.subscription_status === 'trial'))
+            // Determine if this is the current plan
+            // For cancelled subscriptions, still show the plan they had
+            const planKey = plan.planKey || (plan.name === 'Free Trial' ? 'free' : null)
+            
+            // Check if this plan matches the user's subscription
+            const planMatches = 
+              (planKey && subscription?.subscription_plan === planKey) ||
+              (plan.name === 'Free Trial' && (subscription?.subscription_plan === 'free' || (subscription?.subscription_plan === null && subscription?.subscription_status === 'trial')))
+            
+            // Current plan if it matches AND status is not expired
+            // For cancelled/past_due, still show as current plan (they had it)
+            const isCurrentPlan = planMatches && subscription?.subscription_status !== 'expired'
+            
             const isProfessional = plan.name === 'Professional'
             
             return (
@@ -509,38 +539,36 @@ export default function SubscriptionPage() {
                 }`}
               >
                 {isCurrentPlan && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-semibold shadow-lg">
+                  <div className="absolute -top-2.5 left-1/2 transform -translate-x-1/2">
+                    <span className="bg-indigo-600 text-white px-3 py-0.5 rounded-full text-xs font-medium">
                       Current Plan
                     </span>
                   </div>
                 )}
                 
                 {isProfessional && !isCurrentPlan && (
-                  <div className="absolute -top-3 right-4">
-                    <span className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-md">
+                  <div className="absolute -top-2.5 right-4">
+                    <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-full text-xs font-medium">
                       Popular
                     </span>
                   </div>
                 )}
 
                 <div className="mb-6">
-                  <h3 className="text-2xl font-bold text-gray-900 mb-2">{plan.name}</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">{plan.name}</h3>
                   <div className="flex items-baseline">
-                    <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
-                    <span className="text-gray-600 ml-2">/month</span>
+                    <span className="text-3xl font-bold text-gray-900">${plan.price}</span>
+                    <span className="text-gray-500 ml-1.5 text-sm">/month</span>
                   </div>
                 </div>
 
-                <ul className="space-y-3 mb-8">
+                <ul className="space-y-2.5 mb-8">
                   {plan.features.map((feature, featureIndex) => (
                     <li key={featureIndex} className="flex items-start">
-                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-3 mt-0.5 flex-shrink-0">
-                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <span className="text-gray-700 text-sm leading-relaxed">{feature}</span>
+                      <svg className="w-4 h-4 text-green-600 mr-2.5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                      <span className="text-gray-600 text-sm">{feature}</span>
                     </li>
                   ))}
                 </ul>
@@ -556,13 +584,13 @@ export default function SubscriptionPage() {
                     plan.name === 'Free Trial' ||
                     (upgrading !== null && upgrading === plan.planKey)
                   }
-                  className={`w-full py-3 px-4 rounded-xl font-semibold transition-all duration-200 ${
+                  className={`w-full py-2.5 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
                     subscription?.subscription_status === 'expired' && plan.name !== 'Free Trial'
-                      ? 'bg-red-600 hover:bg-red-700 text-white shadow-lg hover:shadow-xl'
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
                       : isCurrentPlan
-                        ? 'bg-gray-300 cursor-not-allowed text-gray-600'
-                        : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg hover:shadow-xl'
-                  } disabled:bg-gray-300 disabled:cursor-not-allowed disabled:shadow-none`}
+                        ? 'bg-gray-100 cursor-not-allowed text-gray-500'
+                        : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                  } disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500`}
                 >
                   {/* Free Trial - Never show loading */}
                   {plan.name === 'Free Trial' ? (
