@@ -24,6 +24,7 @@ export default function SubscriptionPage() {
   const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [loadingPortal, setLoadingPortal] = useState(false)
 
   const fetchSubscription = useCallback(async () => {
     if (!user?.id) return
@@ -152,25 +153,6 @@ export default function SubscriptionPage() {
     }
   }
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    })
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
-      </div>
-    )
-  }
-
-  const [loadingPortal, setLoadingPortal] = useState(false)
-
   const handleManageBilling = async () => {
     if (!user?.id || !subscription?.stripe_customer_id) {
       setError('No active subscription found')
@@ -205,6 +187,23 @@ export default function SubscriptionPage() {
     } finally {
       setLoadingPortal(false)
     }
+  }
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
+      </div>
+    )
   }
 
   return (
@@ -329,7 +328,7 @@ export default function SubscriptionPage() {
                 💡 <strong>Manage Your Subscription:</strong>
               </p>
               <p className="text-sm text-blue-700">
-                Use the "Manage Billing" button above to access Stripe Customer Portal where you can update payment methods, view invoices, cancel subscription, and more.
+                Use the &quot;Manage Billing&quot; button above to access Stripe Customer Portal where you can update payment methods, view invoices, cancel subscription, and more.
               </p>
             </div>
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
