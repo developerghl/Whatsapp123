@@ -609,12 +609,44 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
         // Find user by stripe_customer_id
         const { data: user } = await supabaseAdmin
           .from('users')
-          .select('id, email, name, subscription_plan')
+          .select('id, email, name, subscription_plan, stripe_subscription_id')
           .eq('stripe_customer_id', customerId)
           .maybeSingle();
 
         if (user) {
           console.log(`⚠️ Payment failed for user ${user.id}`);
+          
+          // Check subscription status in Stripe to get accurate status
+          let subscriptionStatus = 'active'; // Default
+          if (user.stripe_subscription_id && stripe) {
+            try {
+              const stripeSubscription = await stripe.subscriptions.retrieve(user.stripe_subscription_id);
+              subscriptionStatus = stripeSubscription.status; // 'active', 'past_due', 'unpaid', 'canceled', etc.
+              console.log(`📊 Stripe subscription status: ${subscriptionStatus}`);
+            } catch (stripeError) {
+              console.error('❌ Error fetching Stripe subscription:', stripeError);
+            }
+          }
+
+          // Update subscription status based on Stripe status
+          let statusUpdate = {};
+          if (subscriptionStatus === 'past_due') {
+            statusUpdate.subscription_status = 'past_due';
+          } else if (subscriptionStatus === 'unpaid' || subscriptionStatus === 'canceled') {
+            statusUpdate.subscription_status = 'cancelled';
+            statusUpdate.max_subaccounts = 1; // Reset to trial limits
+          } else if (subscriptionStatus === 'active') {
+            // Keep as active but mark as past_due for payment issues
+            statusUpdate.subscription_status = 'past_due';
+          }
+
+          if (Object.keys(statusUpdate).length > 0) {
+            await supabaseAdmin
+              .from('users')
+              .update(statusUpdate)
+              .eq('id', user.id);
+            console.log(`✅ Updated subscription status for user ${user.id}: ${JSON.stringify(statusUpdate)}`);
+          }
           
           // Log payment failure event
           await supabaseAdmin.from('subscription_events').insert({
@@ -624,7 +656,8 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
             metadata: {
               invoice_id: invoice.id,
               amount_due: invoice.amount_due,
-              invoice_url: invoice.hosted_invoice_url
+              invoice_url: invoice.hosted_invoice_url,
+              subscription_status: subscriptionStatus
             }
           });
 
@@ -645,9 +678,6 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
             console.error('❌ Error sending payment failed email:', emailError);
             // Don't fail the webhook if email fails
           }
-
-          // Optionally update subscription status after multiple failures
-          // For now, we'll keep it active and let Stripe handle retries
         }
 
         break;
