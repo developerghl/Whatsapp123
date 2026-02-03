@@ -24,9 +24,8 @@ const Stripe = require('stripe');
 const { downloadMediaMessage, downloadContentFromMessage } = require('@whiskeysockets/baileys');
 // Import subaccount helpers
 const subaccountHelpers = require('./lib/subaccount-helpers');
-// Import drip queue processor
-const DripQueueProcessor = require('./lib/drip-queue-processor');
-const dripQueueProcessor = new DripQueueProcessor();
+// Import drip queue processor (already instantiated)
+const dripQueueProcessor = require('./lib/drip-queue-processor');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
