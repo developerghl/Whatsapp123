@@ -26,7 +26,6 @@ interface SubaccountStatus {
 export default function AccountsPage() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
-  const [ghlAccounts, setGhlAccounts] = useState<GhlAccount[]>([])
   const [subaccountStatuses, setSubaccountStatuses] = useState<SubaccountStatus[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -53,7 +52,6 @@ export default function AccountsPage() {
       if (ghlError) {
         console.error('Database error:', ghlError)
       }
-      setGhlAccounts(ghlAccounts || [])
 
       if (ghlAccounts && ghlAccounts.length > 0) {
         const statusPromises = ghlAccounts.map(async (ghlAccount) => {

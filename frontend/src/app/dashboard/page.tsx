@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { API_ENDPOINTS, apiCall } from '@/lib/config'
 import Link from 'next/link'
 
 export default function Dashboard() {
