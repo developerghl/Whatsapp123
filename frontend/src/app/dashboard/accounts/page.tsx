@@ -520,44 +520,30 @@ export default function AccountsPage() {
 
       {/* Modals */}
       {confirmDelete.open && (
-        <Modal isOpen={confirmDelete.open} onClose={() => setConfirmDelete({ open: false })}>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Delete Account?</h3>
-          <p className="text-gray-600 mb-6">This will remove the account and disconnect WhatsApp.</p>
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => setConfirmDelete({ open: false })}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={confirmDeleteAction}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-            >
-              Delete
-            </button>
-          </div>
+        <Modal
+          isOpen={confirmDelete.open}
+          onClose={() => setConfirmDelete({ open: false })}
+          title="Delete Account?"
+          icon="danger"
+          confirmText="Delete"
+          cancelText="Cancel"
+          onConfirm={confirmDeleteAction}
+        >
+          <p>This will remove the account and disconnect WhatsApp.</p>
         </Modal>
       )}
 
       {confirmResetSession.open && (
-        <Modal isOpen={confirmResetSession.open} onClose={() => setConfirmResetSession({ open: false })}>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Reset Session?</h3>
-          <p className="text-gray-600 mb-6">This will disconnect WhatsApp and require QR scan again.</p>
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => setConfirmResetSession({ open: false })}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={confirmResetSessionAction}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
-            >
-              Reset
-            </button>
-          </div>
+        <Modal
+          isOpen={confirmResetSession.open}
+          onClose={() => setConfirmResetSession({ open: false })}
+          title="Reset Session?"
+          icon="warning"
+          confirmText="Reset"
+          cancelText="Cancel"
+          onConfirm={confirmResetSessionAction}
+        >
+          <p>This will disconnect WhatsApp and require QR scan again.</p>
         </Modal>
       )}
 
