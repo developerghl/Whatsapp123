@@ -24,6 +24,11 @@ export default function SubscriptionPage() {
   const [error, setError] = useState<string | null>(null)
   const [loadingPortal, setLoadingPortal] = useState(false)
 
+  // Type guard to check if subscription status is cancelled or expired
+  const isCancelledOrExpired = (status: SubscriptionData['subscription_status']): status is 'cancelled' | 'expired' => {
+    return status === 'cancelled' || status === 'expired'
+  }
+
   const fetchSubscription = useCallback(async () => {
     if (!user?.id) return
 
@@ -36,7 +41,7 @@ export default function SubscriptionPage() {
         .single()
 
       if (!error && data) {
-        setSubscription(data)
+        setSubscription(data as SubscriptionData)
       }
     } catch (error) {
       console.error('Error fetching subscription:', error)
@@ -432,7 +437,7 @@ export default function SubscriptionPage() {
               {subscription.subscription_ends_at && (
                 <div className="space-y-1">
                   <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    {subscription.subscription_status === 'cancelled' || subscription.subscription_status === 'expired' 
+                    {isCancelledOrExpired(subscription.subscription_status)
                       ? 'Access Until' 
                       : subscription.subscription_status === 'active'
                       ? 'Renews On'
