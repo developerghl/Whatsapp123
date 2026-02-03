@@ -1610,24 +1610,17 @@ app.get('/oauth/callback', async (req, res) => {
     
     // Get user data for redirect - ensure we get the correct user
     const { data: userData, error: userError } = await supabaseAdmin
-      .from('auth.users')
-      .select('id, raw_user_meta_data')
+      .from('users')
+      .select('id, name, email')
       .eq('id', targetUserId)
       .single();
     
-    // Extract user data from auth metadata
-    const userDataFormatted = userData ? {
-      id: userData.id,
-      name: userData.raw_user_meta_data?.name || userData.raw_user_meta_data?.full_name || 'User',
-      email: userData.raw_user_meta_data?.email || null
-    } : null;
+    console.log('🔍 User data for redirect:', { userData, userError, targetUserId });
     
-    console.log('🔍 User data for redirect:', { userData: userDataFormatted, userError, targetUserId });
-    
-    if (userDataFormatted) {
+    if (userData) {
       // Redirect with existing user data
-      console.log('✅ Redirecting with user data:', userDataFormatted);
-      res.redirect(`${frontendUrl}/auth/callback?ghl=connected&user=${encodeURIComponent(JSON.stringify(userDataFormatted))}`);
+      console.log('✅ Redirecting with user data:', userData);
+      res.redirect(`${frontendUrl}/auth/callback?ghl=connected&user=${encodeURIComponent(JSON.stringify(userData))}`);
     } else {
       console.error('❌ User not found for redirect:', userError);
       // Fallback redirect
