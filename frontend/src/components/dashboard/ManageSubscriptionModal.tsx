@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { API_ENDPOINTS, apiCall } from '@/lib/config'
@@ -32,7 +32,7 @@ export default function ManageSubscriptionModal({ isOpen, onClose }: ManageSubsc
   const [success, setSuccess] = useState<string | null>(null)
 
   // Fetch subscription details
-  const fetchSubscription = async () => {
+  const fetchSubscription = useCallback(async () => {
     if (!user?.id) return
 
     try {
@@ -54,7 +54,7 @@ export default function ManageSubscriptionModal({ isOpen, onClose }: ManageSubsc
     } finally {
       setLoading(false)
     }
-  }
+  }, [user?.id])
 
   useEffect(() => {
     if (isOpen && user) {
@@ -63,7 +63,7 @@ export default function ManageSubscriptionModal({ isOpen, onClose }: ManageSubsc
       const interval = setInterval(fetchSubscription, 5000)
       return () => clearInterval(interval)
     }
-  }, [isOpen, user])
+  }, [isOpen, user, fetchSubscription])
 
   const handleCancel = async () => {
     if (!user?.id || !subscription?.stripe_subscription_id) {

@@ -1,8 +1,8 @@
 'use client'
 
-import { Fragment, useState, useEffect } from 'react'
+import { Fragment, useState, useEffect, useCallback } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { API_ENDPOINTS, apiCall } from '@/lib/config'
+import { apiCall } from '@/lib/config'
 
 interface SubaccountSettingsModalProps {
   isOpen: boolean
@@ -53,13 +53,7 @@ export default function SubaccountSettingsModal({
   const [sessions, setSessions] = useState<Session[]>([])
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
-  useEffect(() => {
-    if (isOpen && ghlAccountId) {
-      fetchData()
-    }
-  }, [isOpen, ghlAccountId])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       // Fetch settings
@@ -88,7 +82,13 @@ export default function SubaccountSettingsModal({
     } finally {
       setLoading(false)
     }
-  }
+  }, [ghlAccountId])
+
+  useEffect(() => {
+    if (isOpen && ghlAccountId) {
+      fetchData()
+    }
+  }, [isOpen, ghlAccountId, fetchData])
 
   const handleSave = async () => {
     setSaving(true)

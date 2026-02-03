@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 
 // Small utilities used by the cartoon-eyes and the form below
 interface PupilProps {
@@ -91,7 +90,6 @@ const EyeBall = ({ size = 48, pupilSize = 16, maxDistance = 10, eyeColor = "whit
 };
 
 export default function LoginPage() {
-  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

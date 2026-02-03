@@ -604,6 +604,12 @@ export default function Dashboard() {
         />
       )}
 
+      {/* Manage Subscription Modal */}
+      <ManageSubscriptionModal
+        isOpen={showManageSubscription}
+        onClose={() => setShowManageSubscription(false)}
+      />
+
       {/* Header Stats - reference style */}
       <div className="mb-6 flex items-center justify-end">
         <button
