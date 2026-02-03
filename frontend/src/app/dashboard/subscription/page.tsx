@@ -2,7 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { API_ENDPOINTS, apiCall } from '@/lib/config'
 
 interface SubscriptionData {
@@ -25,33 +25,34 @@ export default function SubscriptionPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchSubscription = async () => {
-      if (!user?.id) return
+  const fetchSubscription = useCallback(async () => {
+    if (!user?.id) return
 
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .select('subscription_status, subscription_plan, max_subaccounts, trial_ends_at, subscription_started_at, subscription_ends_at, stripe_subscription_id, stripe_customer_id')
-          .eq('id', user.id)
-          .single()
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('users')
+        .select('subscription_status, subscription_plan, max_subaccounts, trial_ends_at, subscription_started_at, subscription_ends_at, stripe_subscription_id, stripe_customer_id')
+        .eq('id', user.id)
+        .single()
 
-        if (!error && data) {
-          setSubscription(data)
-        }
-      } catch (error) {
-        console.error('Error fetching subscription:', error)
-      } finally {
-        setLoading(false)
+      if (!error && data) {
+        setSubscription(data)
       }
+    } catch (error) {
+      console.error('Error fetching subscription:', error)
+    } finally {
+      setLoading(false)
     }
+  }, [user?.id])
 
+  useEffect(() => {
     fetchSubscription()
     
     // Poll for updates every 10 seconds
     const interval = setInterval(fetchSubscription, 10000)
     return () => clearInterval(interval)
-  }, [user])
+  }, [fetchSubscription])
 
   const plans = [
     { name: 'Free Trial', price: 0, subaccounts: 1, features: ['7 days free', '1 subaccount', 'Unlimited WhatsApp Messages'], planKey: null },
