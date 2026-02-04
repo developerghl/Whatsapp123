@@ -6081,27 +6081,30 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
   try {
     console.log('🎯 GHL Marketplace Action Execute received:', JSON.stringify(req.body, null, 2));
     
-    const {
-      locationId,
-      contactId,
-      contact,
-      phone,
-      message,
-      customFields,
-      workflowData,
-      actionData
-    } = req.body;
+    // GHL Marketplace Action payload structure:
+    // {
+    //   "data": { "message_body": "..." },
+    //   "extras": { "locationId": "...", "contactId": "...", "workflowId": "...", "companyId": "..." },
+    //   "meta": { "key": "...", "version": "..." },
+    //   "isMarketplaceAction": true
+    // }
     
-    // Extract phone number from various possible fields
-    const phoneNumber = phone || contact?.phone || contact?.phoneNumber || contact?.customFields?.phone;
+    const { data, extras, meta } = req.body;
     
-    if (!phoneNumber) {
-      console.error('❌ No phone number found in action data');
+    if (!extras || !extras.locationId || !extras.contactId) {
+      console.error('❌ Missing required fields: locationId or contactId');
       return res.status(400).json({ 
-        status: 'error', 
-        message: 'Phone number is required' 
+        error: {
+          status: 'error',
+          message: 'locationId and contactId are required'
+        },
+        status: 400
       });
     }
+    
+    const locationId = extras.locationId;
+    const contactId = extras.contactId;
+    const messageText = data?.message_body || data?.message || 'Message from GHL workflow';
     
     // Get GHL account by locationId
     const { data: ghlAccount } = await supabaseAdmin
@@ -6113,8 +6116,55 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
     if (!ghlAccount) {
       console.error(`❌ GHL account not found for locationId: ${locationId}`);
       return res.status(404).json({ 
-        status: 'error', 
-        message: 'GHL account not found for this location' 
+        error: {
+          status: 'error',
+          message: 'GHL account not found for this location'
+        },
+        status: 404
+      });
+    }
+    
+    // Fetch contact from GHL API to get phone number
+    const GHLClient = require('./lib/ghl');
+    const ghlClient = new GHLClient(ghlAccount.access_token, locationId);
+    
+    let phoneNumber = null;
+    try {
+      const contactResponse = await ghlClient.getContact(contactId);
+      console.log('📋 Contact response from GHL:', JSON.stringify(contactResponse, null, 2));
+      
+      // GHL contact response structure: { contact: { phone: "...", ... } } or { phone: "..." }
+      if (contactResponse?.contact?.phone) {
+        phoneNumber = contactResponse.contact.phone;
+        console.log(`✅ Fetched phone number from GHL contact: ${phoneNumber}`);
+      } else if (contactResponse?.phone) {
+        phoneNumber = contactResponse.phone;
+        console.log(`✅ Fetched phone number from GHL: ${phoneNumber}`);
+      } else {
+        // Try alternative phone fields
+        phoneNumber = contactResponse?.phoneNumber || 
+                     contactResponse?.contact?.phoneNumber || 
+                     contactResponse?.customFields?.phone ||
+                     contactResponse?.contact?.customFields?.phone;
+      }
+    } catch (ghlError) {
+      console.error('❌ Error fetching contact from GHL:', ghlError.message || ghlError);
+      // Continue with fallback - try to get from request body
+    }
+    
+    // Fallback: Check if phone is in request body directly
+    if (!phoneNumber) {
+      phoneNumber = req.body.phone || req.body.data?.phone || extras?.phone;
+    }
+    
+    if (!phoneNumber) {
+      console.error('❌ No phone number found in contact data');
+      return res.status(400).json({ 
+        error: {
+          status: 'error',
+          message: 'Phone number is required. Could not fetch from contact.'
+        },
+        status: 400
       });
     }
     
@@ -6131,8 +6181,11 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
     if (!session) {
       console.error(`❌ No active WhatsApp session found for locationId: ${locationId}`);
       return res.status(404).json({ 
-        status: 'error', 
-        message: 'No active WhatsApp session found' 
+        error: {
+          status: 'error',
+          message: 'No active WhatsApp session found'
+        },
+        status: 404
       });
     }
     
@@ -6145,19 +6198,19 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
     if (!clientStatus || (clientStatus.status !== 'connected' && clientStatus.status !== 'ready')) {
       console.error(`❌ WhatsApp client not connected for session: ${session.id}`);
       return res.status(503).json({ 
-        status: 'error', 
-        message: 'WhatsApp client not connected' 
+        error: {
+          status: 'error',
+          message: 'WhatsApp client not connected'
+        },
+        status: 503
       });
     }
     
     // Format phone number (E.164 format)
-    let formattedPhone = phoneNumber;
+    let formattedPhone = phoneNumber.toString().trim();
     if (!formattedPhone.startsWith('+')) {
       formattedPhone = '+' + formattedPhone.replace(/^\+/, '');
     }
-    
-    // Prepare message text
-    const messageText = message || actionData?.message || 'Message from GHL workflow';
     
     // Send WhatsApp message
     try {
@@ -6180,7 +6233,8 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
           contact_id: contactId,
           phone: formattedPhone,
           session_id: session.id,
-          action_type: 'send_via_octendr'
+          action_type: 'send_via_octendr',
+          workflow_id: extras.workflowId
         }
       });
       
@@ -6197,18 +6251,24 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
     } catch (sendError) {
       console.error('❌ Error sending WhatsApp message:', sendError);
       res.status(500).json({ 
-        status: 'error', 
-        message: 'Failed to send WhatsApp message',
-        error: sendError.message 
+        error: {
+          status: 'error',
+          message: 'Failed to send WhatsApp message',
+          error: sendError.message
+        },
+        status: 500
       });
     }
     
   } catch (error) {
     console.error('❌ GHL Marketplace Action Execute error:', error);
     res.status(500).json({ 
-      status: 'error', 
-      message: 'Action execution failed',
-      error: error.message 
+      error: {
+        status: 'error',
+        message: 'Action execution failed',
+        error: error.message
+      },
+      status: 500
     });
   }
 });
