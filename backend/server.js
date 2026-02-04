@@ -6075,6 +6075,144 @@ app.post('/api/ghl-workflow', async (req, res) => {
   }
 });
 
+// GHL Marketplace Action Execute Webhook
+// This endpoint receives data when "Send via Octendr" action is triggered in GHL workflows
+app.post('/webhooks/ghl/action-execute', async (req, res) => {
+  try {
+    console.log('🎯 GHL Marketplace Action Execute received:', JSON.stringify(req.body, null, 2));
+    
+    const {
+      locationId,
+      contactId,
+      contact,
+      phone,
+      message,
+      customFields,
+      workflowData,
+      actionData
+    } = req.body;
+    
+    // Extract phone number from various possible fields
+    const phoneNumber = phone || contact?.phone || contact?.phoneNumber || contact?.customFields?.phone;
+    
+    if (!phoneNumber) {
+      console.error('❌ No phone number found in action data');
+      return res.status(400).json({ 
+        status: 'error', 
+        message: 'Phone number is required' 
+      });
+    }
+    
+    // Get GHL account by locationId
+    const { data: ghlAccount } = await supabaseAdmin
+      .from('ghl_accounts')
+      .select('*')
+      .eq('location_id', locationId)
+      .maybeSingle();
+    
+    if (!ghlAccount) {
+      console.error(`❌ GHL account not found for locationId: ${locationId}`);
+      return res.status(404).json({ 
+        status: 'error', 
+        message: 'GHL account not found for this location' 
+      });
+    }
+    
+    // Get active WhatsApp session for this account
+    const { data: session } = await supabaseAdmin
+      .from('sessions')
+      .select('*')
+      .eq('ghl_account_id', ghlAccount.id)
+      .eq('status', 'ready')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    if (!session) {
+      console.error(`❌ No active WhatsApp session found for locationId: ${locationId}`);
+      return res.status(404).json({ 
+        status: 'error', 
+        message: 'No active WhatsApp session found' 
+      });
+    }
+    
+    // Build client key
+    const cleanSubaccountId = session.subaccount_id?.replace(/[^a-zA-Z0-9_-]/g, '_') || ghlAccount.id;
+    const clientKey = `location_${cleanSubaccountId}_${session.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    
+    // Check client status
+    const clientStatus = waManager.getClientStatus(clientKey);
+    if (!clientStatus || (clientStatus.status !== 'connected' && clientStatus.status !== 'ready')) {
+      console.error(`❌ WhatsApp client not connected for session: ${session.id}`);
+      return res.status(503).json({ 
+        status: 'error', 
+        message: 'WhatsApp client not connected' 
+      });
+    }
+    
+    // Format phone number (E.164 format)
+    let formattedPhone = phoneNumber;
+    if (!formattedPhone.startsWith('+')) {
+      formattedPhone = '+' + formattedPhone.replace(/^\+/, '');
+    }
+    
+    // Prepare message text
+    const messageText = message || actionData?.message || 'Message from GHL workflow';
+    
+    // Send WhatsApp message
+    try {
+      await waManager.sendMessage(
+        clientKey,
+        formattedPhone,
+        messageText,
+        'text'
+      );
+      
+      console.log(`✅ Message sent via GHL Marketplace Action: ${formattedPhone}`);
+      
+      // Log the action execution
+      await supabaseAdmin.from('subscription_events').insert({
+        user_id: ghlAccount.user_id,
+        event_type: 'ghl_marketplace_action_executed',
+        plan_name: 'marketplace_action',
+        metadata: {
+          location_id: locationId,
+          contact_id: contactId,
+          phone: formattedPhone,
+          session_id: session.id,
+          action_type: 'send_via_octendr'
+        }
+      });
+      
+      res.json({
+        status: 'success',
+        message: 'Message sent successfully',
+        data: {
+          phone: formattedPhone,
+          message: messageText,
+          locationId,
+          contactId
+        }
+      });
+    } catch (sendError) {
+      console.error('❌ Error sending WhatsApp message:', sendError);
+      res.status(500).json({ 
+        status: 'error', 
+        message: 'Failed to send WhatsApp message',
+        error: sendError.message 
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ GHL Marketplace Action Execute error:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: 'Action execution failed',
+      error: error.message 
+    });
+  }
+});
+
 // Team notification webhook endpoint for GHL workflow
 app.post('/api/team-notification', async (req, res) => {
   try {
