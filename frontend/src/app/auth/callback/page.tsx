@@ -33,11 +33,11 @@ function CallbackContent() {
             if (isAgency === 'true' && locationsCount) {
               setStatus(`🏢 Agency connected successfully! ${locationsCount} locations imported. Redirecting...`)
             } else {
-              setStatus('✅ GHL account connected! Redirecting to accounts...')
+              setStatus('✅ GHL account connected! Redirecting to dashboard...')
             }
             
-            // Redirect to accounts page instead of dashboard
-            setTimeout(() => router.push('/dashboard/accounts?ghl=connected&success=account_added'), 2000)
+            // Redirect to dashboard (backend already handles this but just in case)
+            setTimeout(() => router.push('/dashboard'), 1500)
             return
           } catch (e) {
             console.error('Error parsing user data:', e)
