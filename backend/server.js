@@ -6172,7 +6172,7 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
     const { data: session } = await supabaseAdmin
       .from('sessions')
       .select('*')
-      .eq('ghl_account_id', ghlAccount.id)
+      .eq('subaccount_id', ghlAccount.id)
       .eq('status', 'ready')
       .order('created_at', { ascending: false })
       .limit(1)
