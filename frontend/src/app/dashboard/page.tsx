@@ -14,6 +14,7 @@ export default function Dashboard() {
   const router = useRouter()
   const toast = useToast()
   const toastShownRef = useRef<string | null>(null)
+  const hasProcessedParams = useRef(false)
   const [stats, setStats] = useState({
     totalAccounts: 0,
     activeConnections: 0,
@@ -112,99 +113,84 @@ export default function Dashboard() {
     fetchSubscriptionStatus()
   }, [user])
 
-  // Check for success/error messages in URL
+  // Check for success/error messages in URL - only once on mount
   useEffect(() => {
+    // Prevent multiple executions
+    if (hasProcessedParams.current) {
+      return
+    }
+    
     const success = searchParams.get('success')
     const error = searchParams.get('error')
     const current = searchParams.get('current')
     const max = searchParams.get('max')
     
-    // Create unique key for this toast to prevent duplicates
+    // Create unique key for this toast
     const toastKey = success || error
     
-    // Skip if we've already shown this toast
-    if (!toastKey || toastShownRef.current === toastKey) {
+    // If no params, mark as processed and return
+    if (!toastKey) {
+      hasProcessedParams.current = true
       return
     }
     
-    // Account-related toasts
+    // Mark as processed immediately to prevent re-execution
+    hasProcessedParams.current = true
+    
+    // Show toast immediately
     if (success === 'account_added') {
-      toastShownRef.current = toastKey
       toast.showToast({
         type: 'success',
         title: 'Account Connected',
         message: 'Your GoHighLevel account has been connected successfully!',
         durationMs: 5000
       })
-      // Clear URL params after showing toast
-      setTimeout(() => {
-        router.replace('/dashboard', { scroll: false })
-        toastShownRef.current = null
-      }, 200)
     } else if (error === 'account_already_added') {
-      toastShownRef.current = toastKey
       toast.showToast({
         type: 'warning',
         title: 'Account Already Connected',
         message: 'This account is already connected to your profile.',
         durationMs: 5000
       })
-      setTimeout(() => {
-        router.replace('/dashboard', { scroll: false })
-        toastShownRef.current = null
-      }, 200)
     } else if (error === 'location_exists') {
-      toastShownRef.current = toastKey
       toast.showToast({
         type: 'error',
         title: 'Location Already In Use',
         message: 'This location is already linked to another account. Please use a different GoHighLevel location.',
         durationMs: 6000
       })
-      setTimeout(() => {
-        router.replace('/dashboard', { scroll: false })
-        toastShownRef.current = null
-      }, 200)
     } else if (error === 'limit_reached') {
-      toastShownRef.current = toastKey
       toast.showToast({
         type: 'error',
         title: 'Account Limit Reached',
         message: `You have reached your account limit (${current || 0}/${max || 0}). Please upgrade your plan to add more accounts.`,
         durationMs: 6000
       })
-      setTimeout(() => {
-        router.replace('/dashboard', { scroll: false })
-        toastShownRef.current = null
-      }, 200)
-    } 
-    // Subscription/Payment related toasts
-    else if (error === 'payment_failed') {
-      toastShownRef.current = toastKey
+    } else if (error === 'payment_failed') {
       toast.showToast({
         type: 'error',
         title: 'Payment Failed',
         message: 'Payment failed. Please update your payment method to continue using the service.',
         durationMs: 6000
       })
-      setTimeout(() => {
-        router.replace('/dashboard', { scroll: false })
-        toastShownRef.current = null
-      }, 200)
     } else if (error === 'subscription_expired') {
-      toastShownRef.current = toastKey
       toast.showToast({
         type: 'warning',
         title: 'Subscription Expired',
         message: 'Your subscription has expired. Please upgrade to continue.',
         durationMs: 6000
       })
-      setTimeout(() => {
-        router.replace('/dashboard', { scroll: false })
-        toastShownRef.current = null
-      }, 200)
     }
-  }, [searchParams, router, toast])
+    
+    // Clear URL params after showing toast (no reload)
+    if (toastKey) {
+      setTimeout(() => {
+        if (typeof window !== 'undefined') {
+          window.history.replaceState({}, '', window.location.pathname)
+        }
+      }, 50)
+    }
+  }, []) // Empty dependency array - only run once on mount
 
   if (loading) {
     return (
