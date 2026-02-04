@@ -238,21 +238,21 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Quick Actions - Minimal Style */}
-      <div className="bg-white rounded-2xl p-8 border border-gray-200">
-        <h2 className="text-xl font-bold text-gray-900 mb-6">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Quick Actions - Modern Style */}
+      <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 border border-gray-200/50 mb-8">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Link
             href="/dashboard/accounts"
-            className="group p-6 bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 hover:border-indigo-400 rounded-xl transition-all duration-200 hover:shadow-lg"
+            className="group p-5 bg-gradient-to-br from-gray-50/80 to-white/80 backdrop-blur-sm border border-gray-200/50 hover:border-indigo-300/50 rounded-lg transition-all duration-200 hover:shadow-md"
           >
-            <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mb-4 group-hover:bg-indigo-600 transition-colors">
-              <svg className="w-5 h-5 text-indigo-600 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-9 h-9 bg-indigo-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-indigo-600 transition-colors">
+              <svg className="w-4.5 h-4.5 text-indigo-600 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
-            <h3 className="font-semibold text-gray-900 mb-1">Manage Accounts</h3>
-            <p className="text-sm text-gray-500">View and configure your GHL integrations</p>
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Manage Accounts</h3>
+            <p className="text-xs text-gray-500">View and configure your GHL integrations</p>
           </Link>
 
           <button
@@ -268,7 +268,7 @@ export default function Dashboard() {
               }
             }}
             disabled={subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled' || subscriptionStatus === 'expired'}
-            className="group p-6 bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 hover:border-green-400 rounded-xl transition-all duration-200 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left w-full"
+            className="group p-5 bg-gradient-to-br from-gray-50/80 to-white/80 backdrop-blur-sm border border-gray-200/50 hover:border-green-300/50 rounded-lg transition-all duration-200 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-left w-full"
             title={
               subscriptionStatus === 'expired' 
                 ? 'Your subscription has expired. Please upgrade to add accounts.'
@@ -277,36 +277,36 @@ export default function Dashboard() {
                 : ''
             }
           >
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-600 transition-colors">
-              <svg className="w-5 h-5 text-green-600 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-green-600 transition-colors">
+              <svg className="w-4.5 h-4.5 text-green-600 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </div>
-            <h3 className="font-semibold text-gray-900 mb-1">Add Subaccount</h3>
-            <p className="text-sm text-gray-500">Connect a new GHL location</p>
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Add Subaccount</h3>
+            <p className="text-xs text-gray-500">Connect a new GHL location</p>
           </button>
 
           <Link
             href="/dashboard/subscription"
-            className="group p-6 bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 hover:border-blue-400 rounded-xl transition-all duration-200 hover:shadow-lg"
+            className="group p-5 bg-gradient-to-br from-gray-50/80 to-white/80 backdrop-blur-sm border border-gray-200/50 hover:border-blue-300/50 rounded-lg transition-all duration-200 hover:shadow-md"
           >
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-600 transition-colors">
-              <svg className="w-5 h-5 text-blue-600 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-blue-600 transition-colors">
+              <svg className="w-4.5 h-4.5 text-blue-600 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
-            <h3 className="font-semibold text-gray-900 mb-1">Subscription</h3>
-            <p className="text-sm text-gray-500">Manage your plan and billing</p>
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Subscription</h3>
+            <p className="text-xs text-gray-500">Manage your plan and billing</p>
           </Link>
         </div>
       </div>
 
-      {/* Activity Overview - Minimal Design */}
-      <div className="bg-white rounded-2xl p-8 border border-gray-200">
-        <div className="flex items-center justify-between mb-6">
+      {/* Activity Overview - Modern Design */}
+      <div className="bg-white/80 backdrop-blur-sm rounded-xl p-6 border border-gray-200/50">
+        <div className="flex items-center justify-between mb-5">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Activity Overview</h2>
-            <p className="text-sm text-gray-500 mt-1">Real-time connection status</p>
+            <h2 className="text-lg font-bold text-gray-900">Activity Overview</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Real-time connection status</p>
           </div>
           <Link
             href="/dashboard/accounts"

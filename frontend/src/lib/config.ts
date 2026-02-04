@@ -7,6 +7,7 @@ export const API_ENDPOINTS = {
   connectSubaccount: `${API_BASE_URL}/admin/ghl/connect-subaccount`,
   getSubaccounts: `${API_BASE_URL}/admin/ghl/subaccounts`,
   createSubaccount: `${API_BASE_URL}/admin/ghl/create-subaccount`,
+  deleteSubaccount: `${API_BASE_URL}/admin/ghl/delete-subaccount`,
   debugSubaccounts: `${API_BASE_URL}/admin/ghl/debug-subaccounts`,
   
   // Session endpoints

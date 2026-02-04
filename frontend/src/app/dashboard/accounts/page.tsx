@@ -35,7 +35,6 @@ export default function AccountsPage() {
   const [itemsPerPage] = useState(10)
   const [filterStatus, setFilterStatus] = useState<string>('all')
   const [refreshing, setRefreshing] = useState(false)
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; locationId?: string }>({ open: false })
   const [confirmResetSession, setConfirmResetSession] = useState<{ open: boolean; locationId?: string }>({ open: false })
   const [settingsModal, setSettingsModal] = useState<{ open: boolean; ghlAccountId?: string; locationId?: string }>({ open: false })
@@ -218,14 +217,26 @@ export default function AccountsPage() {
       })
 
       if (response.ok) {
-        setNotification({ type: 'success', message: '✅ Session logged out successfully!' })
+        toast.showToast({
+          type: 'success',
+          title: 'Session Logged Out',
+          message: 'Session logged out successfully!'
+        })
         await fetchGHLLocations(false)
       } else {
-        setNotification({ type: 'error', message: '❌ Failed to logout session' })
+        toast.showToast({
+          type: 'error',
+          title: 'Logout Failed',
+          message: 'Failed to logout session'
+        })
       }
     } catch (error) {
       console.error('Error logging out session:', error)
-      setNotification({ type: 'error', message: '❌ Error logging out session' })
+      toast.showToast({
+        type: 'error',
+        title: 'Logout Failed',
+        message: 'An error occurred while logging out the session'
+      })
     }
   }
 
@@ -243,15 +254,27 @@ export default function AccountsPage() {
       })
 
       if (response.ok) {
-        setNotification({ type: 'success', message: '✅ Session reset successfully!' })
+        toast.showToast({
+          type: 'success',
+          title: 'Session Reset',
+          message: 'Session reset successfully!'
+        })
         setConfirmResetSession({ open: false })
         await fetchGHLLocations(false)
       } else {
-        setNotification({ type: 'error', message: '❌ Failed to reset session' })
+        toast.showToast({
+          type: 'error',
+          title: 'Reset Failed',
+          message: 'Failed to reset session'
+        })
       }
     } catch (error) {
       console.error('Error resetting session:', error)
-      setNotification({ type: 'error', message: '❌ Error resetting session' })
+      toast.showToast({
+        type: 'error',
+        title: 'Reset Failed',
+        message: 'An error occurred while resetting the session'
+      })
     }
   }
 
@@ -264,27 +287,37 @@ export default function AccountsPage() {
     if (!locationId) return
 
     try {
-      const response = await apiCall(API_ENDPOINTS.resetSession(locationId), {
-        method: 'POST'
+      const response = await apiCall(API_ENDPOINTS.deleteSubaccount, {
+        method: 'DELETE',
+        body: JSON.stringify({ locationId })
       })
 
       if (response.ok) {
-        setNotification({ type: 'success', message: '✅ Account deleted successfully!' })
+        toast.showToast({
+          type: 'success',
+          title: 'Account Deleted',
+          message: 'Account deleted successfully!'
+        })
         setConfirmDelete({ open: false })
         await fetchGHLLocations(false)
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to delete account' }))
+        toast.showToast({
+          type: 'error',
+          title: 'Delete Failed',
+          message: errorData.error || 'Failed to delete account'
+        })
       }
     } catch (error) {
       console.error('Error deleting account:', error)
-      setNotification({ type: 'error', message: '❌ Failed to delete account' })
+      toast.showToast({
+        type: 'error',
+        title: 'Delete Failed',
+        message: 'An error occurred while deleting the account'
+      })
     }
   }
 
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => setNotification(null), 5000)
-      return () => clearTimeout(timer)
-    }
-  }, [notification])
 
   // Filter and search
   const filteredAccounts = subaccountStatuses.filter(account => {
@@ -653,25 +686,6 @@ export default function AccountsPage() {
         />
       )}
 
-      {/* Notification */}
-      {notification && (
-        <div className={`fixed top-20 right-6 z-50 px-6 py-4 rounded-xl shadow-lg border ${
-          notification.type === 'success'
-            ? 'bg-green-50 border-green-200 text-green-800'
-            : 'bg-red-50 border-red-200 text-red-800'
-        } transition-all`}>
-          <div className="flex items-center gap-3">
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-              {notification.type === 'success' ? (
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              ) : (
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              )}
-            </svg>
-            <p className="font-medium">{notification.message}</p>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
