@@ -111,10 +111,49 @@ export default function Dashboard() {
     fetchSubscriptionStatus()
   }, [user])
 
-  // Check for error messages in URL
+  // Check for success/error messages in URL
   useEffect(() => {
+    const success = searchParams.get('success')
     const error = searchParams.get('error')
-    if (error === 'payment_failed') {
+    const current = searchParams.get('current')
+    const max = searchParams.get('max')
+    
+    // Account-related toasts
+    if (success === 'account_added') {
+      toast.showToast({
+        type: 'success',
+        title: 'Account Connected',
+        message: 'Your GoHighLevel account has been connected successfully!',
+        durationMs: 5000
+      })
+      router.replace('/dashboard')
+    } else if (error === 'account_already_added') {
+      toast.showToast({
+        type: 'warning',
+        title: 'Account Already Connected',
+        message: 'This account is already connected to your profile.',
+        durationMs: 5000
+      })
+      router.replace('/dashboard')
+    } else if (error === 'location_exists') {
+      toast.showToast({
+        type: 'error',
+        title: 'Location Already In Use',
+        message: 'This location is already linked to another account. Please use a different GoHighLevel location.',
+        durationMs: 6000
+      })
+      router.replace('/dashboard')
+    } else if (error === 'limit_reached') {
+      toast.showToast({
+        type: 'error',
+        title: 'Account Limit Reached',
+        message: `You have reached your account limit (${current || 0}/${max || 0}). Please upgrade your plan to add more accounts.`,
+        durationMs: 6000
+      })
+      router.replace('/dashboard')
+    } 
+    // Subscription/Payment related toasts
+    else if (error === 'payment_failed') {
       toast.showToast({
         type: 'error',
         title: 'Payment Failed',
@@ -127,14 +166,6 @@ export default function Dashboard() {
         type: 'warning',
         title: 'Subscription Expired',
         message: 'Your subscription has expired. Please upgrade to continue.',
-        durationMs: 6000
-      })
-      router.replace('/dashboard')
-    } else if (error === 'location_exists') {
-      toast.showToast({
-        type: 'error',
-        title: 'Location Already Linked',
-        message: 'This location is already linked to another account. Please use a different GoHighLevel location.',
         durationMs: 6000
       })
       router.replace('/dashboard')

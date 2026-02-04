@@ -1525,7 +1525,7 @@ app.get('/oauth/callback', async (req, res) => {
       });
       
       const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
-      return res.redirect(`${frontendUrl}/dashboard/accounts?error=location_exists`);
+      return res.redirect(`${frontendUrl}/dashboard?error=location_exists`);
     }
     
     // 3. Check if this location was previously used by this user (even if deleted)
@@ -1638,10 +1638,9 @@ app.get('/oauth/callback', async (req, res) => {
         // For past_due: Redirect to payment page instead of blocking
         if (userInfo.subscription_status === 'past_due') {
           return res.redirect(`${frontendUrl}/dashboard/add-subaccount?error=payment_failed&status=past_due`);
-        } else if (userInfo.subscription_status === 'active') {
-          return res.redirect(`${frontendUrl}/dashboard?error=limit_reached_additional&current=${currentCount}&max=${userInfo.max_subaccounts}&available=${availableCount}`);
         } else {
-          return res.redirect(`${frontendUrl}/dashboard?error=trial_limit_reached&current=${currentCount}&max=${userInfo.max_subaccounts}&available=${availableCount}`);
+          // For both active and trial users - same limit reached message (buttons already locked on frontend)
+          return res.redirect(`${frontendUrl}/dashboard?error=limit_reached&current=${currentCount}&max=${userInfo.max_subaccounts}`);
         }
       }
       
@@ -1680,10 +1679,9 @@ app.get('/oauth/callback', async (req, res) => {
         // For past_due: Redirect to payment page instead of blocking
         if (userInfo.subscription_status === 'past_due') {
           return res.redirect(`${frontendUrl}/dashboard/add-subaccount?error=payment_failed&status=past_due`);
-        } else if (userInfo.subscription_status === 'active') {
-          return res.redirect(`${frontendUrl}/dashboard?error=limit_reached_additional&current=${currentCount}&max=${userInfo.max_subaccounts}&available=${availableCount}`);
         } else {
-          return res.redirect(`${frontendUrl}/dashboard?error=trial_limit_reached&current=${currentCount}&max=${userInfo.max_subaccounts}&available=${availableCount}`);
+          // For both active and trial users - same limit reached message (buttons already locked on frontend)
+          return res.redirect(`${frontendUrl}/dashboard?error=limit_reached&current=${currentCount}&max=${userInfo.max_subaccounts}`);
         }
       }
       
@@ -1716,7 +1714,7 @@ app.get('/oauth/callback', async (req, res) => {
       });
       
       const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
-      return res.redirect(`${frontendUrl}/dashboard/accounts?error=account_already_added&location_id=${encodeURIComponent(finalLocationId)}`);
+      return res.redirect(`${frontendUrl}/dashboard?error=account_already_added`);
     }
     
     // User already verified above, proceed with GHL account storage
@@ -1828,13 +1826,13 @@ app.get('/oauth/callback', async (req, res) => {
     console.log('🔍 User data for redirect:', { userData, userError, targetUserId });
     
     if (userData) {
-      // Redirect to accounts page with success message
+      // Redirect to dashboard with success message
       console.log('✅ Redirecting with user data:', userData);
-      res.redirect(`${frontendUrl}/dashboard/accounts?ghl=connected&success=account_added`);
+      res.redirect(`${frontendUrl}/dashboard?success=account_added`);
     } else {
       console.error('❌ User not found for redirect:', userError);
-      // Fallback redirect to accounts page
-      res.redirect(`${frontendUrl}/dashboard/accounts?ghl=connected`);
+      // Fallback redirect to dashboard
+      res.redirect(`${frontendUrl}/dashboard?success=account_added`);
     }
     
   } catch (error) {

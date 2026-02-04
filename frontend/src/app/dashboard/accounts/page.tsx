@@ -41,39 +41,7 @@ export default function AccountsPage() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
 
-  // Check URL params for success/error messages and show toast immediately
-  useEffect(() => {
-    const success = searchParams.get('success')
-    const error = searchParams.get('error')
-    const ghlConnected = searchParams.get('ghl')
-    
-    // Show toast immediately when params are present
-    if (success === 'account_added' || ghlConnected === 'connected') {
-      toast.showToast({
-        type: 'success',
-        title: 'Account Added Successfully',
-        message: 'Your GoHighLevel account has been connected successfully!',
-        durationMs: 5000
-      })
-      router.replace('/dashboard/accounts', { scroll: false })
-    } else if (error === 'account_already_added') {
-      toast.showToast({
-        type: 'warning',
-        title: 'Account Already Added',
-        message: 'This account is already connected to your profile.',
-        durationMs: 5000
-      })
-      router.replace('/dashboard/accounts', { scroll: false })
-    } else if (error === 'location_exists') {
-      toast.showToast({
-        type: 'error',
-        title: 'Location Already Linked',
-        message: 'This location is already linked to another account. Please use a different GoHighLevel location.',
-        durationMs: 6000
-      })
-      router.replace('/dashboard/accounts', { scroll: false })
-    }
-  }, [searchParams, router, toast])
+  // No URL param handling needed here - all account toasts show on dashboard page after redirect
 
 
   // Fetch subscription status
