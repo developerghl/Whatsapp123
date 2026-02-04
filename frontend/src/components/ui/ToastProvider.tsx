@@ -51,7 +51,7 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
     <ToastContext.Provider value={value}>
       {children}
       {/* Toast Container */}
-      <div className="fixed top-20 right-4 z-[100] space-y-2 w-[22rem] max-w-[90vw]">
+      <div className="fixed top-24 right-6 z-[9999] space-y-2 w-[22rem] max-w-[90vw] pointer-events-none">
         {toasts.map(t => {
           const iconByType: Record<ToastType, React.ReactElement> = {
             success: (
@@ -77,7 +77,14 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
           }
           
           return (
-            <div key={t.id} className={`border-l-4 rounded-lg shadow-lg p-4 animate-in slide-in-from-top-4 flex items-start gap-3 ${styleByType[t.type]}`}>
+            <div 
+              key={t.id} 
+              className={`border-l-4 rounded-lg shadow-lg p-4 flex items-start gap-3 pointer-events-auto ${styleByType[t.type]}`}
+              style={{
+                animation: 'slideInFromTop 0.3s ease-out',
+                transform: 'translateY(0)',
+              }}
+            >
               <div className="flex-shrink-0 mt-0.5">
                 {iconByType[t.type]}
               </div>
@@ -87,7 +94,7 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
               </div>
               <button 
                 onClick={() => remove(t.id)} 
-                className="flex-shrink-0 text-sm opacity-60 hover:opacity-100 transition-opacity"
+                className="flex-shrink-0 text-sm opacity-60 hover:opacity-100 transition-opacity font-bold text-lg leading-none"
                 aria-label="Close"
               >
                 ×
