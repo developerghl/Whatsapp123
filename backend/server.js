@@ -787,69 +787,91 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
           break;
         }
 
-        // Update subscription end date
-        if (subscription.current_period_end) {
-          await supabaseAdmin
-            .from('users')
-            .update({
-              subscription_ends_at: new Date(subscription.current_period_end * 1000).toISOString()
-            })
-            .eq('id', user.id);
+        // Determine plan from Stripe subscription items
+        let planType = user.subscription_plan; // Default to existing plan
+        let maxSubaccounts = 1; // Default to trial
+        
+        if (subscription.items && subscription.items.data && subscription.items.data.length > 0) {
+          const priceId = subscription.items.data[0].price.id;
+          // Check if it's a known plan price ID (you may need to adjust these based on your Stripe price IDs)
+          // For now, we'll use metadata or price amount to determine plan
+          const priceAmount = subscription.items.data[0].price.unit_amount;
+          
+          // Determine plan based on price (adjust these amounts based on your actual Stripe prices)
+          if (priceAmount === 1900) { // $19.00 = Starter
+            planType = 'starter';
+            maxSubaccounts = 2;
+          } else if (priceAmount === 4900) { // $49.00 = Professional
+            planType = 'professional';
+            maxSubaccounts = 10;
+          }
+          
+          // Also check metadata if available
+          if (subscription.items.data[0].price.metadata?.plan_type) {
+            planType = subscription.items.data[0].price.metadata.plan_type;
+            maxSubaccounts = planType === 'starter' ? 2 : planType === 'professional' ? 10 : 1;
+          }
+        }
 
-          console.log(`✅ Updated subscription end date for user ${user.id}`);
+        // Update subscription end date and plan
+        let statusUpdate = {
+          subscription_ends_at: subscription.current_period_end 
+            ? new Date(subscription.current_period_end * 1000).toISOString() 
+            : null
+        };
+
+        // Update plan and max_subaccounts if plan changed
+        if (planType && planType !== user.subscription_plan) {
+          statusUpdate.subscription_plan = planType;
+          statusUpdate.max_subaccounts = maxSubaccounts;
+          console.log(`✅ Plan updated for user ${user.id}: ${user.subscription_plan} → ${planType} (max_subaccounts: ${maxSubaccounts})`);
+        } else if (subscription.status === 'active' && !subscription.cancel_at_period_end) {
+          // If subscription is active, ensure max_subaccounts matches the plan
+          statusUpdate.max_subaccounts = maxSubaccounts;
         }
 
         // Handle subscription status changes
-        let statusUpdate = {};
         let shouldLogEvent = false;
         let eventType = 'subscription_updated';
 
         if (subscription.status === 'active' && subscription.cancel_at_period_end === false) {
-          // Subscription reactivated
-          statusUpdate = {
-            subscription_status: 'active'
-          };
+          // Subscription reactivated - restore plan limits
+          statusUpdate.subscription_status = 'active';
+          statusUpdate.max_subaccounts = maxSubaccounts; // Restore based on plan
           eventType = 'subscription_reactivated';
           shouldLogEvent = true;
         } else if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
           // Subscription cancelled or unpaid
-          statusUpdate = {
-            subscription_status: 'cancelled',
-            max_subaccounts: 1 // Reset to trial limits
-          };
+          statusUpdate.subscription_status = 'cancelled';
+          statusUpdate.max_subaccounts = 1; // Reset to trial limits
           eventType = 'subscription_cancelled';
           shouldLogEvent = true;
         } else if (subscription.cancel_at_period_end === true && subscription.status === 'active') {
           // Cancellation scheduled (user cancelled but still has access)
-          statusUpdate = {
-            subscription_status: 'cancelled' // Mark as cancelled but keep access
-          };
+          statusUpdate.subscription_status = 'cancelled'; // Mark as cancelled but keep access
+          // Keep max_subaccounts as is (user still has access until period end)
           eventType = 'subscription_cancellation_scheduled';
           shouldLogEvent = true;
         } else if (subscription.status === 'past_due') {
-          // Payment failed - block account creation
-          statusUpdate = {
-            subscription_status: 'past_due'
-          };
+          // Payment failed - block account creation but keep plan limits
+          statusUpdate.subscription_status = 'past_due';
+          // Keep max_subaccounts (user still has plan, just payment pending)
           eventType = 'subscription_past_due';
           shouldLogEvent = true;
         } else if (subscription.status === 'incomplete' || subscription.status === 'incomplete_expired') {
           // Payment incomplete - treat as past_due
-          statusUpdate = {
-            subscription_status: 'past_due'
-          };
+          statusUpdate.subscription_status = 'past_due';
           eventType = 'subscription_payment_incomplete';
           shouldLogEvent = true;
         }
 
-        if (Object.keys(statusUpdate).length > 0) {
-          await supabaseAdmin
-            .from('users')
-            .update(statusUpdate)
-            .eq('id', user.id);
+        // Update user in database
+        await supabaseAdmin
+          .from('users')
+          .update(statusUpdate)
+          .eq('id', user.id);
 
-          console.log(`✅ Updated subscription status for user ${user.id}: ${JSON.stringify(statusUpdate)}`);
-        }
+        console.log(`✅ Updated subscription for user ${user.id}: ${JSON.stringify(statusUpdate)}`);
 
         // Log event
         if (shouldLogEvent) {
@@ -7008,13 +7030,43 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
       }
     }
 
+    // Determine plan from Stripe subscription items
+    let planType = user.subscription_plan; // Default to existing plan
+    let maxSubaccounts = 1; // Default to trial
+    
+    if (stripeSubscription.items && stripeSubscription.items.data && stripeSubscription.items.data.length > 0) {
+      const priceAmount = stripeSubscription.items.data[0].price.unit_amount;
+      
+      // Determine plan based on price
+      if (priceAmount === 1900) { // $19.00 = Starter
+        planType = 'starter';
+        maxSubaccounts = 2;
+      } else if (priceAmount === 4900) { // $49.00 = Professional
+        planType = 'professional';
+        maxSubaccounts = 10;
+      }
+      
+      // Also check metadata if available
+      if (stripeSubscription.items.data[0].price.metadata?.plan_type) {
+        planType = stripeSubscription.items.data[0].price.metadata.plan_type;
+        maxSubaccounts = planType === 'starter' ? 2 : planType === 'professional' ? 10 : 1;
+      }
+    }
+
     let newStatus = user.subscription_status;
     let statusUpdate = {};
 
     if (stripeStatus === 'active' && cancelAtPeriodEnd === false) {
       newStatus = 'active';
+      // Restore max_subaccounts based on plan when active
+      statusUpdate.max_subaccounts = maxSubaccounts;
+      // Update plan if it changed
+      if (planType && planType !== user.subscription_plan) {
+        statusUpdate.subscription_plan = planType;
+      }
     } else if (stripeStatus === 'past_due' || stripeStatus === 'incomplete' || stripeStatus === 'incomplete_expired') {
       newStatus = 'past_due';
+      // Keep max_subaccounts (user still has plan, just payment pending)
     } else if (stripeStatus === 'canceled' && cancelAtPeriodEnd === true) {
       // Check if cancelled subscription period has ended
       if (stripeSubscription.current_period_end) {
@@ -7028,9 +7080,9 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
           statusUpdate.stripe_subscription_id = null; // Clear subscription ID
           console.log(`⏰ Subscription period ended for user ${userId} - marking as expired`);
         } else {
-          // Still within period, mark as cancelled
+          // Still within period, mark as cancelled but keep plan limits
           newStatus = 'cancelled';
-          statusUpdate.max_subaccounts = 1;
+          // Keep max_subaccounts (user still has access until period end)
         }
       } else {
         // No period_end, mark as cancelled
@@ -7044,16 +7096,24 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
       // Unpaid means payment failed but subscription still exists - mark as past_due
       newStatus = 'past_due';
     } else if (stripeStatus === 'active' && cancelAtPeriodEnd === true) {
-      newStatus = 'cancelled';
+      newStatus = 'cancelled'; // Cancelled but still has access
+      // Keep max_subaccounts (user still has access until period end)
     }
 
     if (newStatus !== user.subscription_status) {
       statusUpdate.subscription_status = newStatus;
+    }
       
-      if (stripeSubscription.current_period_end) {
-        statusUpdate.subscription_ends_at = new Date(stripeSubscription.current_period_end * 1000).toISOString();
-      }
+    if (stripeSubscription.current_period_end) {
+      statusUpdate.subscription_ends_at = new Date(stripeSubscription.current_period_end * 1000).toISOString();
+    }
 
+    // Update if status changed OR if max_subaccounts needs to be corrected
+    const needsUpdate = Object.keys(statusUpdate).length > 0 || 
+                       (newStatus === 'active' && user.max_subaccounts !== maxSubaccounts) ||
+                       (planType && planType !== user.subscription_plan);
+
+    if (needsUpdate) {
       await supabaseAdmin
         .from('users')
         .update(statusUpdate)
@@ -7144,14 +7204,44 @@ async function syncSubscriptionStatuses() {
           }
         }
 
+        // Determine plan from Stripe subscription items
+        let planType = user.subscription_plan; // Default to existing plan
+        let maxSubaccounts = 1; // Default to trial
+        
+        if (stripeSubscription.items && stripeSubscription.items.data && stripeSubscription.items.data.length > 0) {
+          const priceAmount = stripeSubscription.items.data[0].price.unit_amount;
+          
+          // Determine plan based on price (adjust these amounts based on your actual Stripe prices)
+          if (priceAmount === 1900) { // $19.00 = Starter
+            planType = 'starter';
+            maxSubaccounts = 2;
+          } else if (priceAmount === 4900) { // $49.00 = Professional
+            planType = 'professional';
+            maxSubaccounts = 10;
+          }
+          
+          // Also check metadata if available
+          if (stripeSubscription.items.data[0].price.metadata?.plan_type) {
+            planType = stripeSubscription.items.data[0].price.metadata.plan_type;
+            maxSubaccounts = planType === 'starter' ? 2 : planType === 'professional' ? 10 : 1;
+          }
+        }
+
         // Map Stripe status to our status
         let newStatus = user.subscription_status;
         let statusUpdate = {};
 
         if (stripeStatus === 'active' && cancelAtPeriodEnd === false) {
           newStatus = 'active';
+          // Restore max_subaccounts based on plan when active
+          statusUpdate.max_subaccounts = maxSubaccounts;
+          // Update plan if it changed
+          if (planType && planType !== user.subscription_plan) {
+            statusUpdate.subscription_plan = planType;
+          }
         } else if (stripeStatus === 'past_due' || stripeStatus === 'incomplete' || stripeStatus === 'incomplete_expired') {
           newStatus = 'past_due';
+          // Keep max_subaccounts (user still has plan, just payment pending)
         } else if (stripeStatus === 'canceled' && cancelAtPeriodEnd === true) {
           // Check if cancelled subscription period has ended
           if (stripeSubscription.current_period_end) {
@@ -7165,9 +7255,9 @@ async function syncSubscriptionStatuses() {
               statusUpdate.stripe_subscription_id = null; // Clear subscription ID
               console.log(`⏰ Subscription period ended for user ${user.id} - marking as expired`);
             } else {
-              // Still within period, mark as cancelled
+              // Still within period, mark as cancelled but keep plan limits
               newStatus = 'cancelled';
-              statusUpdate.max_subaccounts = 1; // Reset to trial limits
+              // Keep max_subaccounts (user still has access until period end)
             }
           } else {
             // No period_end, mark as cancelled
@@ -7182,18 +7272,25 @@ async function syncSubscriptionStatuses() {
           newStatus = 'past_due';
         } else if (stripeStatus === 'active' && cancelAtPeriodEnd === true) {
           newStatus = 'cancelled'; // Cancelled but still has access
+          // Keep max_subaccounts (user still has access until period end)
         }
 
         // Check if cancelled subscription has passed subscription_ends_at
         // This check is now done above in the status mapping logic
 
-        // Only update if status changed
-        if (newStatus !== user.subscription_status) {
-          statusUpdate.subscription_status = newStatus;
-          
-          // Update subscription end date
-          if (stripeSubscription.current_period_end) {
-            statusUpdate.subscription_ends_at = new Date(stripeSubscription.current_period_end * 1000).toISOString();
+        // Update subscription end date
+        if (stripeSubscription.current_period_end) {
+          statusUpdate.subscription_ends_at = new Date(stripeSubscription.current_period_end * 1000).toISOString();
+        }
+
+        // Update if status changed OR if max_subaccounts needs to be corrected
+        const needsUpdate = newStatus !== user.subscription_status || 
+                           (newStatus === 'active' && user.max_subaccounts !== maxSubaccounts) ||
+                           (planType && planType !== user.subscription_plan);
+
+        if (needsUpdate) {
+          if (newStatus !== user.subscription_status) {
+            statusUpdate.subscription_status = newStatus;
           }
 
           await supabaseAdmin
