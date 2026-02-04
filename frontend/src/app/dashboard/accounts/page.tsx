@@ -58,7 +58,6 @@ export default function AccountsPage() {
     }
     
     if (error === 'account_already_added') {
-      const locationId = searchParams.get('location_id')
       toast.showToast({
         type: 'warning',
         title: 'Account Already Added',
