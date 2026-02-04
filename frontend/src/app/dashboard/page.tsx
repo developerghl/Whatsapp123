@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { useSearchParams, useRouter } from 'next/navigation'
@@ -13,6 +13,7 @@ export default function Dashboard() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const toast = useToast()
+  const toastShownRef = useRef<string | null>(null)
   const [stats, setStats] = useState({
     totalAccounts: 0,
     activeConnections: 0,
@@ -118,57 +119,90 @@ export default function Dashboard() {
     const current = searchParams.get('current')
     const max = searchParams.get('max')
     
+    // Create unique key for this toast to prevent duplicates
+    const toastKey = success || error
+    
+    // Skip if we've already shown this toast
+    if (!toastKey || toastShownRef.current === toastKey) {
+      return
+    }
+    
     // Account-related toasts
     if (success === 'account_added') {
+      toastShownRef.current = toastKey
       toast.showToast({
         type: 'success',
         title: 'Account Connected',
         message: 'Your GoHighLevel account has been connected successfully!',
         durationMs: 5000
       })
-      router.replace('/dashboard')
+      // Clear URL params after showing toast
+      setTimeout(() => {
+        router.replace('/dashboard', { scroll: false })
+        toastShownRef.current = null
+      }, 200)
     } else if (error === 'account_already_added') {
+      toastShownRef.current = toastKey
       toast.showToast({
         type: 'warning',
         title: 'Account Already Connected',
         message: 'This account is already connected to your profile.',
         durationMs: 5000
       })
-      router.replace('/dashboard')
+      setTimeout(() => {
+        router.replace('/dashboard', { scroll: false })
+        toastShownRef.current = null
+      }, 200)
     } else if (error === 'location_exists') {
+      toastShownRef.current = toastKey
       toast.showToast({
         type: 'error',
         title: 'Location Already In Use',
         message: 'This location is already linked to another account. Please use a different GoHighLevel location.',
         durationMs: 6000
       })
-      router.replace('/dashboard')
+      setTimeout(() => {
+        router.replace('/dashboard', { scroll: false })
+        toastShownRef.current = null
+      }, 200)
     } else if (error === 'limit_reached') {
+      toastShownRef.current = toastKey
       toast.showToast({
         type: 'error',
         title: 'Account Limit Reached',
         message: `You have reached your account limit (${current || 0}/${max || 0}). Please upgrade your plan to add more accounts.`,
         durationMs: 6000
       })
-      router.replace('/dashboard')
+      setTimeout(() => {
+        router.replace('/dashboard', { scroll: false })
+        toastShownRef.current = null
+      }, 200)
     } 
     // Subscription/Payment related toasts
     else if (error === 'payment_failed') {
+      toastShownRef.current = toastKey
       toast.showToast({
         type: 'error',
         title: 'Payment Failed',
         message: 'Payment failed. Please update your payment method to continue using the service.',
         durationMs: 6000
       })
-      router.replace('/dashboard')
+      setTimeout(() => {
+        router.replace('/dashboard', { scroll: false })
+        toastShownRef.current = null
+      }, 200)
     } else if (error === 'subscription_expired') {
+      toastShownRef.current = toastKey
       toast.showToast({
         type: 'warning',
         title: 'Subscription Expired',
         message: 'Your subscription has expired. Please upgrade to continue.',
         durationMs: 6000
       })
-      router.replace('/dashboard')
+      setTimeout(() => {
+        router.replace('/dashboard', { scroll: false })
+        toastShownRef.current = null
+      }, 200)
     }
   }, [searchParams, router, toast])
 
