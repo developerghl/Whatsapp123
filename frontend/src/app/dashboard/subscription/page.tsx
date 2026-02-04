@@ -334,7 +334,7 @@ export default function SubscriptionPage() {
                 <div className="bg-orange-100 border border-orange-300 rounded-lg p-4 mb-4">
                   <p className="text-sm text-orange-900 font-semibold mb-2">💡 Payment Method Update:</p>
                   <p className="text-sm text-orange-800 mb-2">
-                    To update your payment method, you'll need to:
+                    To update your payment method, you&apos;ll need to:
                   </p>
                   <ol className="text-sm text-orange-800 list-decimal list-inside space-y-1 ml-2">
                     <li>Add a new payment method first</li>
