@@ -835,10 +835,23 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
         let eventType = 'subscription_updated';
 
         if (subscription.status === 'active' && subscription.cancel_at_period_end === false) {
-          // Subscription reactivated - restore plan limits
+          // Subscription is active - update to active regardless of current status (past_due, cancelled, etc.)
+          // This ensures that when payment succeeds, status is immediately updated to active
           statusUpdate.subscription_status = 'active';
           statusUpdate.max_subaccounts = maxSubaccounts; // Restore based on plan
-          eventType = 'subscription_reactivated';
+          
+          // Get current user status to determine event type
+          const { data: currentUser } = await supabaseAdmin
+            .from('users')
+            .select('subscription_status')
+            .eq('id', user.id)
+            .single();
+          
+          if (currentUser && (currentUser.subscription_status === 'past_due' || currentUser.subscription_status === 'cancelled')) {
+            eventType = 'subscription_reactivated';
+          } else {
+            eventType = 'subscription_active';
+          }
           shouldLogEvent = true;
         } else if (subscription.status === 'canceled' || subscription.status === 'unpaid') {
           // Subscription cancelled or unpaid
@@ -944,49 +957,57 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
         if (user && subscriptionId) {
           console.log(`✅ Payment succeeded for user ${user.id}`);
           
-          // Update subscription status to active if it was past_due or cancelled
-          if (user.subscription_status === 'past_due' || user.subscription_status === 'cancelled') {
-            try {
-              // Get subscription from Stripe to verify status
-              const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+          try {
+            // Get subscription from Stripe to verify status
+            const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+            
+            // Always update to active if Stripe subscription is active (regardless of current database status)
+            if (stripeSubscription.status === 'active' && !stripeSubscription.cancel_at_period_end) {
+              const oldStatus = user.subscription_status;
               
-              if (stripeSubscription.status === 'active') {
-                await supabaseAdmin
-                  .from('users')
-                  .update({
-                    subscription_status: 'active'
-                  })
-                  .eq('id', user.id);
+              // Determine max_subaccounts based on plan
+              let maxSubaccounts = 1;
+              if (stripeSubscription.items && stripeSubscription.items.data && stripeSubscription.items.data.length > 0) {
+                const priceAmount = stripeSubscription.items.data[0].price.unit_amount;
+                if (priceAmount === 1900) {
+                  maxSubaccounts = 2; // Starter
+                } else if (priceAmount === 4900) {
+                  maxSubaccounts = 10; // Professional
+                }
                 
-                console.log(`✅ Reactivated subscription for user ${user.id} after payment`);
-                
-                // Log payment success event
-                await supabaseAdmin.from('subscription_events').insert({
-                  user_id: user.id,
-                  event_type: 'payment_succeeded_reactivation',
-                  plan_name: user.subscription_plan || 'unknown',
-                  metadata: {
-                    invoice_id: invoice.id,
-                    subscription_id: subscriptionId,
-                    old_status: user.subscription_status,
-                    new_status: 'active'
-                  }
-                });
+                // Check metadata if available
+                if (stripeSubscription.items.data[0].price.metadata?.plan_type) {
+                  const planType = stripeSubscription.items.data[0].price.metadata.plan_type;
+                  maxSubaccounts = planType === 'starter' ? 2 : planType === 'professional' ? 10 : 1;
+                }
               }
-            } catch (stripeError) {
-              console.error('❌ Error verifying subscription status:', stripeError);
+              
+              await supabaseAdmin
+                .from('users')
+                .update({
+                  subscription_status: 'active',
+                  max_subaccounts: maxSubaccounts
+                })
+                .eq('id', user.id);
+              
+              console.log(`✅ Updated subscription to active for user ${user.id} (was: ${oldStatus})`);
+              
+              // Log payment success event
+              await supabaseAdmin.from('subscription_events').insert({
+                user_id: user.id,
+                event_type: oldStatus === 'past_due' || oldStatus === 'cancelled' ? 'payment_succeeded_reactivation' : 'payment_succeeded',
+                plan_name: user.subscription_plan || 'unknown',
+                metadata: {
+                  invoice_id: invoice.id,
+                  subscription_id: subscriptionId,
+                  old_status: oldStatus,
+                  new_status: 'active',
+                  max_subaccounts: maxSubaccounts
+                }
+              });
             }
-          } else {
-            // Log payment success event (for active subscriptions)
-            await supabaseAdmin.from('subscription_events').insert({
-              user_id: user.id,
-              event_type: 'payment_succeeded',
-              plan_name: user.subscription_plan || 'unknown',
-              metadata: {
-                invoice_id: invoice.id,
-                subscription_id: subscriptionId
-              }
-            });
+          } catch (stripeError) {
+            console.error('❌ Error verifying subscription status:', stripeError);
           }
         }
         break;
@@ -7255,6 +7276,7 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
     let statusUpdate = {};
 
     if (stripeStatus === 'active' && cancelAtPeriodEnd === false) {
+      // Stripe is active - always update to active (even if manually set)
       newStatus = 'active';
       // Restore max_subaccounts based on plan when active
       statusUpdate.max_subaccounts = maxSubaccounts;
@@ -7263,7 +7285,16 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
         statusUpdate.subscription_plan = planType;
       }
     } else if (stripeStatus === 'past_due' || stripeStatus === 'incomplete' || stripeStatus === 'incomplete_expired') {
-      newStatus = 'past_due';
+      // Only update to past_due if database is not already active (allow manual override to stay active temporarily)
+      // But if Stripe becomes active, webhook will update it anyway
+      if (user.subscription_status !== 'active') {
+        newStatus = 'past_due';
+      } else {
+        // Database is active but Stripe is past_due - keep active (manual override respected)
+        // This allows manual activation to persist until Stripe webhook updates it
+        newStatus = 'active';
+        console.log(`⚠️ Database is active but Stripe is ${stripeStatus} - keeping active (manual override)`);
+      }
       // Keep max_subaccounts (user still has plan, just payment pending)
     } else if (stripeStatus === 'canceled' && cancelAtPeriodEnd === true) {
       // Check if cancelled subscription period has ended
@@ -7430,6 +7461,7 @@ async function syncSubscriptionStatuses() {
         let statusUpdate = {};
 
         if (stripeStatus === 'active' && cancelAtPeriodEnd === false) {
+          // Stripe is active - always update to active (even if manually set)
           newStatus = 'active';
           // Restore max_subaccounts based on plan when active
           statusUpdate.max_subaccounts = maxSubaccounts;
@@ -7438,7 +7470,16 @@ async function syncSubscriptionStatuses() {
             statusUpdate.subscription_plan = planType;
           }
         } else if (stripeStatus === 'past_due' || stripeStatus === 'incomplete' || stripeStatus === 'incomplete_expired') {
-          newStatus = 'past_due';
+          // Only update to past_due if database is not already active (allow manual override to stay active temporarily)
+          // But if Stripe becomes active, webhook will update it anyway
+          if (user.subscription_status !== 'active') {
+            newStatus = 'past_due';
+          } else {
+            // Database is active but Stripe is past_due - keep active (manual override respected)
+            // This allows manual activation to persist until Stripe webhook updates it
+            newStatus = 'active';
+            console.log(`⚠️ Database is active but Stripe is ${stripeStatus} - keeping active (manual override)`);
+          }
           // Keep max_subaccounts (user still has plan, just payment pending)
         } else if (stripeStatus === 'canceled' && cancelAtPeriodEnd === true) {
           // Check if cancelled subscription period has ended
