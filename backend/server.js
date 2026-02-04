@@ -620,25 +620,51 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
           
           // Check subscription status in Stripe to get accurate status
           let subscriptionStatus = 'active'; // Default
+          let cancelAtPeriodEnd = false;
           if (user.stripe_subscription_id && stripe) {
             try {
               const stripeSubscription = await stripe.subscriptions.retrieve(user.stripe_subscription_id);
               subscriptionStatus = stripeSubscription.status; // 'active', 'past_due', 'unpaid', 'canceled', etc.
-              console.log(`📊 Stripe subscription status: ${subscriptionStatus}`);
+              cancelAtPeriodEnd = stripeSubscription.cancel_at_period_end || false;
+              console.log(`📊 Stripe subscription status: ${subscriptionStatus}, cancel_at_period_end: ${cancelAtPeriodEnd}`);
+              
+              // Check if there are any open invoices (pending payment)
+              const openInvoices = await stripe.invoices.list({
+                customer: customerId,
+                status: 'open',
+                limit: 1
+              });
+              
+              // If there's an open invoice, it means payment is pending, not cancelled
+              if (openInvoices.data.length > 0) {
+                console.log(`📄 Found ${openInvoices.data.length} open invoice(s) - payment is pending`);
+                subscriptionStatus = 'past_due'; // Override to past_due if invoice is pending
+              }
             } catch (stripeError) {
               console.error('❌ Error fetching Stripe subscription:', stripeError);
             }
           }
 
           // Update subscription status based on Stripe status
+          // IMPORTANT: If invoice.payment_failed event occurred, there's a pending invoice
+          // Only mark as cancelled if subscription is actually cancelled (cancel_at_period_end = true)
+          // Otherwise, mark as past_due (payment pending)
           let statusUpdate = {};
           if (subscriptionStatus === 'past_due') {
             statusUpdate.subscription_status = 'past_due';
-          } else if (subscriptionStatus === 'unpaid' || subscriptionStatus === 'canceled') {
+          } else if (subscriptionStatus === 'canceled' && cancelAtPeriodEnd) {
+            // Only mark as cancelled if user actually cancelled (not just payment failed)
             statusUpdate.subscription_status = 'cancelled';
             statusUpdate.max_subaccounts = 1; // Reset to trial limits
+          } else if (subscriptionStatus === 'unpaid') {
+            // Unpaid means payment failed but subscription still exists - mark as past_due
+            statusUpdate.subscription_status = 'past_due';
+          } else if (subscriptionStatus === 'canceled' && !cancelAtPeriodEnd) {
+            // Subscription was cancelled by Stripe (not by user) - but if there's a pending invoice, keep as past_due
+            // Check if invoice exists
+            statusUpdate.subscription_status = 'past_due'; // Payment pending, not actually cancelled
           } else if (subscriptionStatus === 'active') {
-            // Keep as active but mark as past_due for payment issues
+            // Payment failed event but subscription still active - mark as past_due
             statusUpdate.subscription_status = 'past_due';
           }
 
@@ -6845,19 +6871,52 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
 
     // Sync this user's subscription
     const stripeSubscription = await stripe.subscriptions.retrieve(user.stripe_subscription_id);
-    const stripeStatus = stripeSubscription.status;
+    let stripeStatus = stripeSubscription.status;
+    const cancelAtPeriodEnd = stripeSubscription.cancel_at_period_end || false;
+
+    // Check if there are any open invoices (pending payment)
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .single();
+    
+    if (userData?.stripe_customer_id) {
+      try {
+        const openInvoices = await stripe.invoices.list({
+          customer: userData.stripe_customer_id,
+          status: 'open',
+          limit: 1
+        });
+        
+        // If there's an open invoice, it means payment is pending, not cancelled
+        if (openInvoices.data.length > 0 && stripeStatus === 'canceled' && !cancelAtPeriodEnd) {
+          console.log(`📄 Found open invoice - marking as past_due instead of cancelled`);
+          stripeStatus = 'past_due'; // Override to past_due if invoice is pending
+        }
+      } catch (invoiceError) {
+        console.error('❌ Error checking open invoices:', invoiceError);
+      }
+    }
 
     let newStatus = user.subscription_status;
     let statusUpdate = {};
 
-    if (stripeStatus === 'active' && stripeSubscription.cancel_at_period_end === false) {
+    if (stripeStatus === 'active' && cancelAtPeriodEnd === false) {
       newStatus = 'active';
     } else if (stripeStatus === 'past_due' || stripeStatus === 'incomplete' || stripeStatus === 'incomplete_expired') {
       newStatus = 'past_due';
-    } else if (stripeStatus === 'canceled' || stripeStatus === 'unpaid') {
+    } else if (stripeStatus === 'canceled' && cancelAtPeriodEnd === true) {
+      // Only mark as cancelled if user actually cancelled (cancel_at_period_end = true)
       newStatus = 'cancelled';
       statusUpdate.max_subaccounts = 1;
-    } else if (stripeStatus === 'active' && stripeSubscription.cancel_at_period_end === true) {
+    } else if (stripeStatus === 'canceled' && !cancelAtPeriodEnd) {
+      // Subscription was cancelled by Stripe but there might be a pending invoice
+      newStatus = 'past_due'; // Payment pending, not actually cancelled
+    } else if (stripeStatus === 'unpaid') {
+      // Unpaid means payment failed but subscription still exists - mark as past_due
+      newStatus = 'past_due';
+    } else if (stripeStatus === 'active' && cancelAtPeriodEnd === true) {
       newStatus = 'cancelled';
     }
 
@@ -6931,20 +6990,52 @@ async function syncSubscriptionStatuses() {
     for (const user of users) {
       try {
         const stripeSubscription = await stripe.subscriptions.retrieve(user.stripe_subscription_id);
-        const stripeStatus = stripeSubscription.status;
+        let stripeStatus = stripeSubscription.status;
+        const cancelAtPeriodEnd = stripeSubscription.cancel_at_period_end || false;
+
+        // Check if there are any open invoices (pending payment)
+        const { data: userData } = await supabaseAdmin
+          .from('users')
+          .select('stripe_customer_id')
+          .eq('id', user.id)
+          .single();
+        
+        if (userData?.stripe_customer_id) {
+          try {
+            const openInvoices = await stripe.invoices.list({
+              customer: userData.stripe_customer_id,
+              status: 'open',
+              limit: 1
+            });
+            
+            // If there's an open invoice, it means payment is pending, not cancelled
+            if (openInvoices.data.length > 0 && stripeStatus === 'canceled' && !cancelAtPeriodEnd) {
+              stripeStatus = 'past_due'; // Override to past_due if invoice is pending
+            }
+          } catch (invoiceError) {
+            // Silently continue if invoice check fails
+          }
+        }
 
         // Map Stripe status to our status
         let newStatus = user.subscription_status;
         let statusUpdate = {};
 
-        if (stripeStatus === 'active' && stripeSubscription.cancel_at_period_end === false) {
+        if (stripeStatus === 'active' && cancelAtPeriodEnd === false) {
           newStatus = 'active';
         } else if (stripeStatus === 'past_due' || stripeStatus === 'incomplete' || stripeStatus === 'incomplete_expired') {
           newStatus = 'past_due';
-        } else if (stripeStatus === 'canceled' || stripeStatus === 'unpaid') {
+        } else if (stripeStatus === 'canceled' && cancelAtPeriodEnd === true) {
+          // Only mark as cancelled if user actually cancelled (cancel_at_period_end = true)
           newStatus = 'cancelled';
           statusUpdate.max_subaccounts = 1; // Reset to trial limits
-        } else if (stripeStatus === 'active' && stripeSubscription.cancel_at_period_end === true) {
+        } else if (stripeStatus === 'canceled' && !cancelAtPeriodEnd) {
+          // Subscription was cancelled by Stripe but there might be a pending invoice
+          newStatus = 'past_due'; // Payment pending, not actually cancelled
+        } else if (stripeStatus === 'unpaid') {
+          // Unpaid means payment failed but subscription still exists - mark as past_due
+          newStatus = 'past_due';
+        } else if (stripeStatus === 'active' && cancelAtPeriodEnd === true) {
           newStatus = 'cancelled'; // Cancelled but still has access
         }
 

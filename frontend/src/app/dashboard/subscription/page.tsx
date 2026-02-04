@@ -328,9 +328,22 @@ export default function SubscriptionPage() {
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-bold text-orange-900 mb-2">Payment Required</h3>
-                <p className="text-sm text-orange-800 mb-4">
+                <p className="text-sm text-orange-800 mb-3">
                   Your subscription payment has failed. Please pay your pending invoice to restore access to all services.
                 </p>
+                <div className="bg-orange-100 border border-orange-300 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-orange-900 font-semibold mb-2">💡 Payment Method Update:</p>
+                  <p className="text-sm text-orange-800 mb-2">
+                    To update your payment method, you'll need to:
+                  </p>
+                  <ol className="text-sm text-orange-800 list-decimal list-inside space-y-1 ml-2">
+                    <li>Add a new payment method first</li>
+                    <li>Then remove the old payment method</li>
+                  </ol>
+                  <p className="text-sm text-orange-700 mt-2 italic">
+                    This ensures uninterrupted service during the transition.
+                  </p>
+                </div>
                 <p className="text-sm text-orange-700 mb-4 font-medium">
                   ⚠️ Your existing accounts remain, but WhatsApp connections are disabled until payment is completed.
                 </p>
@@ -352,7 +365,7 @@ export default function SubscriptionPage() {
                       <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                       </svg>
-                      Pay Invoice Now
+                      Pay Invoice & Manage Payment Method
                     </>
                   )}
                 </button>
@@ -363,25 +376,25 @@ export default function SubscriptionPage() {
 
         {/* Subscription Cancelled Warning */}
         {subscription?.subscription_status === 'cancelled' && (
-          <div className="mt-6 p-6 bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-300 rounded-xl">
+          <div className="mt-6 p-6 bg-gradient-to-r from-gray-50 to-slate-50 border-2 border-gray-300 rounded-xl">
             <div className="flex items-start">
-              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-4">
-                <svg className="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              <div className="flex-shrink-0 w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mr-4">
+                <svg className="w-6 h-6 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
               </div>
               <div className="flex-1">
-                <h3 className="text-lg font-bold text-red-900 mb-2">Subscription Cancelled</h3>
-                <p className="text-sm text-red-800 mb-4">
-                  Your subscription has been cancelled. Please renew your subscription to restore access to all services.
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Subscription Cancelled</h3>
+                <p className="text-sm text-gray-800 mb-3">
+                  Your subscription has been cancelled. You still have access until {subscription?.subscription_ends_at ? formatDate(subscription.subscription_ends_at) : 'the end of your billing period'}.
                 </p>
-                <p className="text-sm text-red-700 mb-4 font-medium">
-                  ⚠️ Your existing accounts remain, but WhatsApp connections are disabled until subscription is renewed.
+                <p className="text-sm text-gray-700 mb-4 font-medium">
+                  ⚠️ After your access period ends, WhatsApp connections will be disabled. Renew now to continue uninterrupted service.
                 </p>
                 <button
                   onClick={handleManageBilling}
                   disabled={loadingPortal}
-                  className="inline-flex items-center px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:shadow-none"
+                  className="inline-flex items-center px-6 py-3 bg-gray-700 hover:bg-gray-800 disabled:bg-gray-400 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl disabled:shadow-none"
                 >
                   {loadingPortal ? (
                     <>
@@ -518,7 +531,6 @@ export default function SubscriptionPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {plans.map((plan) => {
             // Determine if this is the current plan
-            // For cancelled subscriptions, still show the plan they had
             const planKey = plan.planKey || (plan.name === 'Free Trial' ? 'free' : null)
             
             // Check if this plan matches the user's subscription
@@ -526,9 +538,16 @@ export default function SubscriptionPage() {
               (planKey && subscription?.subscription_plan === planKey) ||
               (plan.name === 'Free Trial' && (subscription?.subscription_plan === 'free' || (subscription?.subscription_plan === null && subscription?.subscription_status === 'trial')))
             
-            // Current plan if it matches AND status is not expired
-            // For cancelled/past_due, still show as current plan (they had it)
-            const isCurrentPlan = planMatches && subscription?.subscription_status !== 'expired'
+            // Determine if user has a paid plan (even if cancelled/past_due)
+            const hasPaidPlan = subscription?.subscription_plan === 'starter' || subscription?.subscription_plan === 'professional'
+            
+            // Current plan logic:
+            // 1. If it matches AND status is not expired
+            // 2. If user has a paid plan, only show that as current (not trial)
+            // 3. If user only has trial, show trial as current
+            const isCurrentPlan = planMatches && 
+              subscription?.subscription_status !== 'expired' &&
+              (hasPaidPlan ? (planKey === 'starter' || planKey === 'professional') : plan.name === 'Free Trial')
             
             const isProfessional = plan.name === 'Professional'
             
