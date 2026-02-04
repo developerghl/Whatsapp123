@@ -345,7 +345,7 @@ export default function SubscriptionPage() {
                   Your subscription payment has failed. Please pay your pending invoice to restore access to all services.
                 </p>
                 <p className="text-sm text-orange-700 mb-4 font-medium">
-                  ⚠️ Your existing accounts remain, but WhatsApp connections are disabled until payment is completed.
+                  Your existing accounts remain, but WhatsApp connections are disabled until payment is completed.
                 </p>
                 <button
                   onClick={handleManageBilling}
@@ -528,8 +528,8 @@ export default function SubscriptionPage() {
       {/* Available Plans - Stripe Style */}
       <div className="mt-12">
         <h2 className="text-2xl font-bold text-gray-900 mb-8">Available Plans</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {plans.map((plan) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {plans.filter(plan => plan.name !== 'Free Trial').map((plan) => {
             // Determine if this is the current plan
             const planKey = plan.planKey || (plan.name === 'Free Trial' ? 'free' : null)
             
