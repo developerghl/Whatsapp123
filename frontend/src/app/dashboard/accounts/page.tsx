@@ -40,34 +40,60 @@ export default function AccountsPage() {
   const [settingsModal, setSettingsModal] = useState<{ open: boolean; ghlAccountId?: string; locationId?: string }>({ open: false })
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [hasShownToast, setHasShownToast] = useState(false)
+  const [pendingToast, setPendingToast] = useState<{ type: 'success' | 'warning' | 'error'; title: string; message: string } | null>(null)
 
-  // Check URL params for success/error messages
+  // Check URL params for success/error messages (but don't show toast yet - wait for data to load)
   useEffect(() => {
     const success = searchParams.get('success')
     const error = searchParams.get('error')
     const ghlConnected = searchParams.get('ghl')
+    const locationExists = searchParams.get('location_exists')
     
+    // Store toast info but don't show yet - wait for data to load
     if (success === 'account_added' || ghlConnected === 'connected') {
-      toast.showToast({
+      setPendingToast({
         type: 'success',
         title: 'Account Added Successfully',
         message: 'Your GoHighLevel account has been connected successfully!'
       })
-      // Clear URL params
-      router.replace('/dashboard/accounts')
-    }
-    
-    if (error === 'account_already_added') {
-      toast.showToast({
+      // Clear URL params immediately to prevent re-triggering
+      router.replace('/dashboard/accounts', { scroll: false })
+    } else if (error === 'account_already_added') {
+      setPendingToast({
         type: 'warning',
         title: 'Account Already Added',
-        message: 'This account is already connected to your profile.',
-        durationMs: 5000
+        message: 'This account is already connected to your profile.'
       })
-      // Clear URL params
-      router.replace('/dashboard/accounts')
+      router.replace('/dashboard/accounts', { scroll: false })
+    } else if (error === 'location_exists' || locationExists) {
+      setPendingToast({
+        type: 'error',
+        title: 'Location Already Linked',
+        message: 'This location is already linked to another account. Please use a different GoHighLevel location.'
+      })
+      router.replace('/dashboard/accounts', { scroll: false })
     }
-  }, [searchParams, router, toast])
+  }, [searchParams, router])
+
+  // Show toast only after data has been loaded (smooth transition)
+  useEffect(() => {
+    if (!loading && pendingToast && !hasShownToast && subaccountStatuses.length >= 0) {
+      // Small delay to ensure UI is stable and data is rendered
+      const timer = setTimeout(() => {
+        toast.showToast({
+          type: pendingToast.type,
+          title: pendingToast.title,
+          message: pendingToast.message,
+          durationMs: pendingToast.type === 'error' ? 6000 : 5000
+        })
+        setHasShownToast(true)
+        setPendingToast(null)
+      }, 400) // 400ms delay for smooth transition after data loads
+      
+      return () => clearTimeout(timer)
+    }
+  }, [loading, pendingToast, hasShownToast, toast, subaccountStatuses.length])
 
   // Fetch subscription status
   useEffect(() => {
@@ -96,7 +122,11 @@ export default function AccountsPage() {
     try {
       if (!user) return
       
-      if (showLoading) setLoading(true)
+      if (showLoading) {
+        setLoading(true)
+        // Reset toast flag when fetching new data (for refresh after add)
+        setHasShownToast(false)
+      }
 
       const { data: ghlAccounts, error: ghlError } = await supabase
         .from('ghl_accounts')

@@ -1525,7 +1525,7 @@ app.get('/oauth/callback', async (req, res) => {
       });
       
       const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
-      return res.redirect(`${frontendUrl}/dashboard?error=location_exists`);
+      return res.redirect(`${frontendUrl}/dashboard/accounts?error=location_exists`);
     }
     
     // 3. Check if this location was previously used by this user (even if deleted)

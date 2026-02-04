@@ -104,100 +104,41 @@ export default function DashboardLayout({
 
   return (
     <div className="h-screen overflow-hidden bg-gray-50">
-      {/* Top Navigation - Minecloud Style Header */}
+      {/* Top Navigation - Original Style Header */}
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
-        <div className="px-6">
-          <div className="flex items-center justify-between h-16">
-            {/* Left: Logo */}
-            <div className="flex items-center space-x-3 flex-shrink-0">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 via-teal-500 to-indigo-600 flex items-center justify-center shadow-md">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/favicon.ico" alt="Octendr" width={24} height={24} className="object-contain" />
-              </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            {/* Left: Logo & Branding */}
+            <div className="flex items-center space-x-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/favicon.ico" alt="Octendr" width={40} height={40} className="object-contain" />
               <div>
-                <h1 className="text-lg font-bold text-gray-900">Octendr</h1>
+                <h1 className="text-xl font-bold text-gray-900">Octendr</h1>
+                <p className="text-xs text-gray-500">WhatsApp GHL Integration</p>
               </div>
-            </div>
-
-            {/* Center: Navigation Tabs */}
-            <div className="flex items-center space-x-1 flex-1 justify-center mx-8">
-              <Link
-                href="/dashboard"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  pathname === '/dashboard'
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-                <span>Dashboard</span>
-              </Link>
-              <Link
-                href="/dashboard/accounts"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  pathname === '/dashboard/accounts'
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <span>Accounts</span>
-              </Link>
-              <Link
-                href="/dashboard/subscription"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  pathname === '/dashboard/subscription'
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-                <span>Subscription</span>
-              </Link>
-              <Link
-                href="/dashboard/billing"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  pathname === '/dashboard/billing'
-                    ? 'bg-indigo-50 text-indigo-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <span>Billing</span>
-              </Link>
             </div>
 
             {/* Right: User Info & Logout */}
-            <div className="flex items-center space-x-3 flex-shrink-0">
-              <div className="flex items-center space-x-3 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-indigo-600 rounded-full flex items-center justify-center shadow-sm">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3 px-3 py-2 bg-gray-50 rounded-lg">
+                <div className="w-9 h-9 bg-gradient-to-br from-emerald-500 to-indigo-600 rounded-full flex items-center justify-center shadow-md">
                   <span className="text-sm font-semibold text-white">
                     {(user?.name || user?.email)?.charAt(0).toUpperCase()}
                   </span>
                 </div>
-                <div className="hidden md:block">
-                  <p className="text-sm font-semibold text-gray-900">
-                    {user?.name && user.name.trim() ? user.name.split(' ')[0] : user?.email?.split('@')[0] || 'User'}
-                  </p>
-                  <p className="text-xs text-gray-500">{user?.email}</p>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{(user?.name && user.name.trim()) || (user?.email?.split('@')[0]) || 'User'} <span className="text-gray-400">·</span> <span className="text-gray-700">{user?.email}</span></p>
+                  <p className="text-xs text-gray-500">Administrator</p>
                 </div>
               </div>
               <button
                 onClick={logout}
-                className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-900 transition-colors px-3 py-2 rounded-lg hover:bg-gray-100"
+                className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-900 transition-colors px-4 py-2 rounded-lg hover:bg-gray-100"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
-                <span className="hidden sm:inline">Logout</span>
+                <span>Logout</span>
               </button>
             </div>
           </div>
