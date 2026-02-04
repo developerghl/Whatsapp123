@@ -136,7 +136,9 @@ export default function ChatWindow({ session, subaccount }: ChatWindowProps) {
       setNewMessage('')
     } catch (error) {
       console.error('Error sending message:', error)
-      alert('Failed to send message. Please try again.')
+      // Note: ChatWindow might not have toast context, using console for now
+      // If needed, can pass toast as prop or use a global notification system
+      console.error('Failed to send message:', error)
     } finally {
       setSending(false)
     }

@@ -7,6 +7,8 @@ import { API_ENDPOINTS, apiCall } from '@/lib/config'
 import SubaccountSettingsModal from '@/components/dashboard/SubaccountSettingsModal'
 import PaymentRenewalModal from '@/components/dashboard/PaymentRenewalModal'
 import Modal from '@/components/ui/Modal'
+import { useToast } from '@/components/ui/ToastProvider'
+import { useSearchParams, useRouter } from 'next/navigation'
 
 interface SubaccountStatus {
   id: string
@@ -23,6 +25,9 @@ interface SubaccountStatus {
 
 export default function AccountsPage() {
   const { user } = useAuth()
+  const toast = useToast()
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [subaccountStatuses, setSubaccountStatuses] = useState<SubaccountStatus[]>([])
   const [searchQuery, setSearchQuery] = useState('')
@@ -36,6 +41,35 @@ export default function AccountsPage() {
   const [settingsModal, setSettingsModal] = useState<{ open: boolean; ghlAccountId?: string; locationId?: string }>({ open: false })
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+
+  // Check URL params for success/error messages
+  useEffect(() => {
+    const success = searchParams.get('success')
+    const error = searchParams.get('error')
+    const ghlConnected = searchParams.get('ghl')
+    
+    if (success === 'account_added' || ghlConnected === 'connected') {
+      toast.showToast({
+        type: 'success',
+        title: 'Account Added Successfully',
+        message: 'Your GoHighLevel account has been connected successfully!'
+      })
+      // Clear URL params
+      router.replace('/dashboard/accounts')
+    }
+    
+    if (error === 'account_already_added') {
+      const locationId = searchParams.get('location_id')
+      toast.showToast({
+        type: 'warning',
+        title: 'Account Already Added',
+        message: 'This account is already connected to your profile.',
+        durationMs: 5000
+      })
+      // Clear URL params
+      router.replace('/dashboard/accounts')
+    }
+  }, [searchParams, router, toast])
 
   // Fetch subscription status
   useEffect(() => {
@@ -161,11 +195,19 @@ export default function AccountsPage() {
         window.open(link, '_blank')
       } else {
         const errorData = await createResponse.json()
-        alert(`Failed to create session: ${errorData.error || 'Unknown error'}`)
+        toast.showToast({
+          type: 'error',
+          title: 'Session Creation Failed',
+          message: errorData.error || 'Unknown error occurred'
+        })
       }
     } catch (error) {
       console.error('Error creating session:', error)
-      alert(`Error creating session: ${error}`)
+      toast.showToast({
+        type: 'error',
+        title: 'Error',
+        message: error instanceof Error ? error.message : 'Failed to create session'
+      })
     }
   }
 
@@ -317,15 +359,25 @@ export default function AccountsPage() {
           </button>
           <button
             onClick={() => {
-              if (subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled') {
-                setShowPaymentModal(true)
+              if (subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled' || subscriptionStatus === 'expired') {
+                if (subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled') {
+                  setShowPaymentModal(true)
+                } else {
+                  window.location.href = '/dashboard/subscription'
+                }
               } else {
                 window.location.href = '/dashboard/add-subaccount'
               }
             }}
-            disabled={subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled'}
+            disabled={subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled' || subscriptionStatus === 'expired'}
             className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            title={subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled' ? 'Payment required to add new accounts' : ''}
+            title={
+              subscriptionStatus === 'expired' 
+                ? 'Your subscription has expired. Please upgrade to add accounts.'
+                : subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled'
+                ? 'Payment required to add new accounts'
+                : ''
+            }
           >
             + Add Account
           </button>

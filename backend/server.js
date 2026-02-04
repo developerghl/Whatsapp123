@@ -1471,8 +1471,14 @@ app.get('/oauth/callback', async (req, res) => {
     // NOTE: past_due status does NOT block - existing accounts continue working
     const isOnTrial = userInfo.subscription_status === 'trial' || userInfo.subscription_status === 'free';
     const trialExpired = isOnTrial && userInfo.trial_ends_at && new Date(userInfo.trial_ends_at) <= new Date();
+    
+    // Check if cancelled subscription has passed subscription_ends_at
+    const subscriptionExpired = userInfo.subscription_status === 'cancelled' && 
+                               userInfo.subscription_ends_at && 
+                               new Date(userInfo.subscription_ends_at) <= new Date();
+    
     const isExpired = userInfo.subscription_status === 'expired' || 
-                      userInfo.subscription_status === 'cancelled' || 
+                      subscriptionExpired ||
                       trialExpired;
     
     if (isExpired) {
@@ -1483,7 +1489,7 @@ app.get('/oauth/callback', async (req, res) => {
         trialExpired
       });
       const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
-      return res.redirect(`${frontendUrl}/dashboard?error=subscription_expired`);
+      return res.redirect(`${frontendUrl}/dashboard/add-subaccount?error=subscription_expired`);
     }
     
     // For past_due: Allow account creation but redirect to payment page
@@ -1710,7 +1716,7 @@ app.get('/oauth/callback', async (req, res) => {
       });
       
       const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
-      return res.redirect(`${frontendUrl}/dashboard?error=account_already_added&location_id=${encodeURIComponent(finalLocationId)}`);
+      return res.redirect(`${frontendUrl}/dashboard/accounts?error=account_already_added&location_id=${encodeURIComponent(finalLocationId)}`);
     }
     
     // User already verified above, proceed with GHL account storage
@@ -1822,13 +1828,13 @@ app.get('/oauth/callback', async (req, res) => {
     console.log('🔍 User data for redirect:', { userData, userError, targetUserId });
     
     if (userData) {
-      // Redirect with existing user data
+      // Redirect to accounts page with success message
       console.log('✅ Redirecting with user data:', userData);
-      res.redirect(`${frontendUrl}/auth/callback?ghl=connected&user=${encodeURIComponent(JSON.stringify(userData))}`);
+      res.redirect(`${frontendUrl}/dashboard/accounts?ghl=connected&success=account_added`);
     } else {
       console.error('❌ User not found for redirect:', userError);
-      // Fallback redirect
-    res.redirect(`${frontendUrl}/dashboard?ghl=connected`);
+      // Fallback redirect to accounts page
+      res.redirect(`${frontendUrl}/dashboard/accounts?ghl=connected`);
     }
     
   } catch (error) {
@@ -6631,19 +6637,49 @@ app.post('/api/admin/check-reminders', async (req, res) => {
   }
 });
 
-// Trial expiry check and processing function
-async function checkAndProcessExpiredTrials() {
+// Check and process expired subscriptions (both trials and cancelled subscriptions)
+async function checkAndProcessExpiredSubscriptions() {
   try {
-    console.log('🕐 Checking for expired trials...');
+    console.log('🕐 Checking for expired subscriptions and trials...');
     const emailService = require('./lib/email');
     const now = new Date().toISOString();
+    const nowDate = new Date();
 
-    // Find all users with expired trials (trial_ends_at <= now and status is still 'trial' or 'free')
-    const { data: expiredUsers, error: fetchError } = await supabaseAdmin
+    // 1. Find all users with expired trials (trial_ends_at <= now and status is still 'trial' or 'free')
+    const { data: expiredTrials, error: trialError } = await supabaseAdmin
       .from('users')
       .select('id, email, name, subscription_status, trial_ends_at')
       .in('subscription_status', ['trial', 'free'])
       .lte('trial_ends_at', now);
+
+    // 2. Find all users with cancelled subscriptions that have passed subscription_ends_at
+    const { data: expiredSubscriptions, error: subError } = await supabaseAdmin
+      .from('users')
+      .select('id, email, name, subscription_status, subscription_ends_at, stripe_subscription_id')
+      .eq('subscription_status', 'cancelled')
+      .not('subscription_ends_at', 'is', null)
+      .lte('subscription_ends_at', now);
+
+    if (trialError) {
+      console.error('❌ Error fetching expired trials:', trialError);
+    }
+    if (subError) {
+      console.error('❌ Error fetching expired subscriptions:', subError);
+    }
+
+    const expiredUsers = [
+      ...(expiredTrials || []),
+      ...(expiredSubscriptions || [])
+    ].filter((user, index, self) => 
+      index === self.findIndex(u => u.id === user.id)
+    ); // Remove duplicates
+
+    if (expiredUsers.length === 0) {
+      console.log('✅ No expired subscriptions/trials found');
+      return;
+    }
+
+    console.log(`📋 Found ${expiredUsers.length} expired subscription(s)/trial(s)`);
 
     if (fetchError) {
       console.error('❌ Error fetching expired trials:', fetchError);
@@ -6659,7 +6695,14 @@ async function checkAndProcessExpiredTrials() {
 
     for (const user of expiredUsers) {
       try {
-        console.log(`🔄 Processing expired trial for user: ${user.id} (${user.email})`);
+        const isTrialExpired = (user.subscription_status === 'trial' || user.subscription_status === 'free') && 
+                                user.trial_ends_at && 
+                                new Date(user.trial_ends_at) <= nowDate;
+        const isSubscriptionExpired = user.subscription_status === 'cancelled' && 
+                                      user.subscription_ends_at && 
+                                      new Date(user.subscription_ends_at) <= nowDate;
+
+        console.log(`🔄 Processing expired ${isTrialExpired ? 'trial' : 'subscription'} for user: ${user.id} (${user.email})`);
 
         // Get all GHL accounts (subaccounts) for this user
         const { data: ghlAccounts, error: accountsError } = await supabaseAdmin
@@ -6672,42 +6715,52 @@ async function checkAndProcessExpiredTrials() {
           continue;
         }
 
-        // Delete all sessions first
+        // Disconnect WhatsApp sessions (don't delete accounts - user requirement)
         if (ghlAccounts && ghlAccounts.length > 0) {
           for (const account of ghlAccounts) {
-            // Delete sessions associated with this account
-            const { error: sessionsError } = await supabaseAdmin
+            // Disconnect all sessions for this account
+            const { data: sessions } = await supabaseAdmin
               .from('sessions')
-              .delete()
+              .select('id, status')
               .eq('subaccount_id', account.id);
 
-            if (sessionsError) {
-              console.error(`❌ Error deleting sessions for account ${account.id}:`, sessionsError);
-            } else {
-              console.log(`✅ Deleted sessions for account ${account.id}`);
+            if (sessions && sessions.length > 0) {
+              for (const session of sessions) {
+                try {
+                  // Disconnect WhatsApp client
+                  const sessionName = `subaccount_${account.id}_${session.id}`;
+                  await waManager.disconnectClient(sessionName);
+                  waManager.clearSessionData(sessionName);
+                  
+                  // Update session status to disconnected
+                  await supabaseAdmin
+                    .from('sessions')
+                    .update({ status: 'disconnected' })
+                    .eq('id', session.id);
+                  
+                  console.log(`✅ Disconnected session ${session.id} for account ${account.id}`);
+                } catch (sessionError) {
+                  console.error(`❌ Error disconnecting session ${session.id}:`, sessionError);
+                }
+              }
             }
-          }
-
-          // Delete all GHL accounts (subaccounts)
-          const { error: deleteAccountsError } = await supabaseAdmin
-            .from('ghl_accounts')
-            .delete()
-            .eq('user_id', user.id);
-
-          if (deleteAccountsError) {
-            console.error(`❌ Error deleting GHL accounts for user ${user.id}:`, deleteAccountsError);
-          } else {
-            console.log(`✅ Deleted ${ghlAccounts.length} subaccount(s) for user ${user.id}`);
           }
         }
 
         // Update user subscription status to 'expired'
+        const updateData = {
+          subscription_status: 'expired',
+          max_subaccounts: 1 // Reset to trial limits
+        };
+
+        // If subscription was cancelled and expired, clear stripe_subscription_id
+        if (isSubscriptionExpired && user.stripe_subscription_id) {
+          updateData.stripe_subscription_id = null;
+        }
+
         const { error: updateError } = await supabaseAdmin
           .from('users')
-          .update({
-            subscription_status: 'expired',
-            total_subaccounts: 0
-          })
+          .update(updateData)
           .eq('id', user.id);
 
         if (updateError) {
@@ -6720,20 +6773,23 @@ async function checkAndProcessExpiredTrials() {
         // Log the expiry event
         await supabaseAdmin.from('subscription_events').insert({
           user_id: user.id,
-          event_type: 'trial_expired',
+          event_type: isTrialExpired ? 'trial_expired' : 'subscription_expired',
           plan_name: user.subscription_status,
           metadata: {
-            deleted_subaccounts: ghlAccounts?.length || 0,
-            expired_at: now
+            disconnected_accounts: ghlAccounts?.length || 0,
+            expired_at: now,
+            expiry_type: isTrialExpired ? 'trial' : 'subscription'
           }
         });
 
-        // Send expiry email
-        const emailResult = await emailService.sendTrialExpiredNotification(user.id);
-        if (emailResult.success) {
-          console.log(`✅ Sent expiry email to ${user.email}`);
-        } else {
-          console.error(`❌ Failed to send expiry email to ${user.email}:`, emailResult.error);
+        // Send expiry email (only for trial expiry, not cancelled subscriptions)
+        if (isTrialExpired) {
+          const emailResult = await emailService.sendTrialExpiredNotification(user.id);
+          if (emailResult.success) {
+            console.log(`✅ Sent expiry email to ${user.email}`);
+          } else {
+            console.error(`❌ Failed to send expiry email to ${user.email}:`, emailResult.error);
+          }
         }
 
       } catch (userError) {
@@ -6742,10 +6798,15 @@ async function checkAndProcessExpiredTrials() {
       }
     }
 
-    console.log(`✅ Completed processing ${expiredUsers.length} expired trial(s)`);
+    console.log(`✅ Completed processing ${expiredUsers.length} expired subscription(s)/trial(s)`);
   } catch (error) {
-    console.error('❌ Error in checkAndProcessExpiredTrials:', error);
+    console.error('❌ Error in checkAndProcessExpiredSubscriptions:', error);
   }
+}
+
+// Keep old function name for backward compatibility
+async function checkAndProcessExpiredTrials() {
+  return checkAndProcessExpiredSubscriptions();
 }
 
 // Check for users needing reminder emails (3 days left, 1 day left)
@@ -6907,9 +6968,27 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
     } else if (stripeStatus === 'past_due' || stripeStatus === 'incomplete' || stripeStatus === 'incomplete_expired') {
       newStatus = 'past_due';
     } else if (stripeStatus === 'canceled' && cancelAtPeriodEnd === true) {
-      // Only mark as cancelled if user actually cancelled (cancel_at_period_end = true)
-      newStatus = 'cancelled';
-      statusUpdate.max_subaccounts = 1;
+      // Check if cancelled subscription period has ended
+      if (stripeSubscription.current_period_end) {
+        const periodEnd = new Date(stripeSubscription.current_period_end * 1000);
+        const now = new Date();
+        
+        // If period has ended, mark as expired
+        if (periodEnd <= now) {
+          newStatus = 'expired';
+          statusUpdate.max_subaccounts = 1;
+          statusUpdate.stripe_subscription_id = null; // Clear subscription ID
+          console.log(`⏰ Subscription period ended for user ${userId} - marking as expired`);
+        } else {
+          // Still within period, mark as cancelled
+          newStatus = 'cancelled';
+          statusUpdate.max_subaccounts = 1;
+        }
+      } else {
+        // No period_end, mark as cancelled
+        newStatus = 'cancelled';
+        statusUpdate.max_subaccounts = 1;
+      }
     } else if (stripeStatus === 'canceled' && !cancelAtPeriodEnd) {
       // Subscription was cancelled by Stripe but there might be a pending invoice
       newStatus = 'past_due'; // Payment pending, not actually cancelled
@@ -7026,9 +7105,27 @@ async function syncSubscriptionStatuses() {
         } else if (stripeStatus === 'past_due' || stripeStatus === 'incomplete' || stripeStatus === 'incomplete_expired') {
           newStatus = 'past_due';
         } else if (stripeStatus === 'canceled' && cancelAtPeriodEnd === true) {
-          // Only mark as cancelled if user actually cancelled (cancel_at_period_end = true)
-          newStatus = 'cancelled';
-          statusUpdate.max_subaccounts = 1; // Reset to trial limits
+          // Check if cancelled subscription period has ended
+          if (stripeSubscription.current_period_end) {
+            const periodEnd = new Date(stripeSubscription.current_period_end * 1000);
+            const now = new Date();
+            
+            // If period has ended, mark as expired
+            if (periodEnd <= now) {
+              newStatus = 'expired';
+              statusUpdate.max_subaccounts = 1;
+              statusUpdate.stripe_subscription_id = null; // Clear subscription ID
+              console.log(`⏰ Subscription period ended for user ${user.id} - marking as expired`);
+            } else {
+              // Still within period, mark as cancelled
+              newStatus = 'cancelled';
+              statusUpdate.max_subaccounts = 1; // Reset to trial limits
+            }
+          } else {
+            // No period_end, mark as cancelled
+            newStatus = 'cancelled';
+            statusUpdate.max_subaccounts = 1; // Reset to trial limits
+          }
         } else if (stripeStatus === 'canceled' && !cancelAtPeriodEnd) {
           // Subscription was cancelled by Stripe but there might be a pending invoice
           newStatus = 'past_due'; // Payment pending, not actually cancelled
@@ -7038,6 +7135,9 @@ async function syncSubscriptionStatuses() {
         } else if (stripeStatus === 'active' && cancelAtPeriodEnd === true) {
           newStatus = 'cancelled'; // Cancelled but still has access
         }
+
+        // Check if cancelled subscription has passed subscription_ends_at
+        // This check is now done above in the status mapping logic
 
         // Only update if status changed
         if (newStatus !== user.subscription_status) {
@@ -7059,7 +7159,7 @@ async function syncSubscriptionStatuses() {
           // Log the sync event
           await supabaseAdmin.from('subscription_events').insert({
             user_id: user.id,
-            event_type: 'subscription_synced',
+            event_type: newStatus === 'expired' ? 'subscription_expired' : 'subscription_synced',
             plan_name: user.subscription_plan || 'unknown',
             metadata: {
               stripe_subscription_id: user.stripe_subscription_id,

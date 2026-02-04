@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-saas",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "WhatsApp SaaS Platform with Supabase and React",
   "license": "MIT",
   "main": "server.js",

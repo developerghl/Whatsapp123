@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { useEffect, useState, useCallback } from 'react'
 import { API_ENDPOINTS, apiCall } from '@/lib/config'
+import { useToast } from '@/components/ui/ToastProvider'
 
 interface SubscriptionData {
   subscription_status: 'active' | 'trial' | 'free' | 'past_due' | 'cancelled' | 'expired' | 'trialing'
@@ -18,6 +19,7 @@ interface SubscriptionData {
 
 export default function SubscriptionPage() {
   const { user } = useAuth()
+  const toast = useToast()
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
   const [loading, setLoading] = useState(true)
   const [upgrading, setUpgrading] = useState<string | null>(null)
@@ -51,6 +53,8 @@ export default function SubscriptionPage() {
   }, [user?.id])
 
   useEffect(() => {
+    if (!user?.id) return
+    
     // Sync with Stripe on load (silent background sync)
     const syncWithStripe = async () => {
       try {
@@ -60,16 +64,17 @@ export default function SubscriptionPage() {
       }
     }
     
+    // Initial sync
     syncWithStripe()
     fetchSubscription()
     
-    // Poll for updates every 10 seconds (silent background sync)
+    // Poll for updates every 30 seconds (reduced frequency to prevent reloads)
     const interval = setInterval(() => {
       syncWithStripe()
       fetchSubscription()
-    }, 10000)
+    }, 30000)
     return () => clearInterval(interval)
-  }, [fetchSubscription])
+  }, [user?.id, fetchSubscription])
 
   const plans = [
     { name: 'Free Trial', price: 0, subaccounts: 1, features: ['7 days free', '1 subaccount', 'Unlimited WhatsApp Messages'], planKey: null },
@@ -79,7 +84,11 @@ export default function SubscriptionPage() {
 
   const handleUpgrade = async (plan: 'starter' | 'professional') => {
     if (!user?.id) {
-      alert('Please login to upgrade')
+      toast.showToast({
+        type: 'error',
+        title: 'Login Required',
+        message: 'Please login to upgrade'
+      })
       return
     }
 
@@ -123,7 +132,11 @@ export default function SubscriptionPage() {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to start checkout. Please try again.'
-      alert(`Error: ${errorMessage}`)
+      toast.showToast({
+        type: 'error',
+        title: 'Checkout Failed',
+        message: errorMessage
+      })
       setUpgrading(null)
     }
   }
@@ -328,22 +341,9 @@ export default function SubscriptionPage() {
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-bold text-orange-900 mb-2">Payment Required</h3>
-                <p className="text-sm text-orange-800 mb-3">
+                <p className="text-sm text-orange-800 mb-4">
                   Your subscription payment has failed. Please pay your pending invoice to restore access to all services.
                 </p>
-                <div className="bg-orange-100 border border-orange-300 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-orange-900 font-semibold mb-2">💡 Payment Method Update:</p>
-                  <p className="text-sm text-orange-800 mb-2">
-                    To update your payment method, you&apos;ll need to:
-                  </p>
-                  <ol className="text-sm text-orange-800 list-decimal list-inside space-y-1 ml-2">
-                    <li>Add a new payment method first</li>
-                    <li>Then remove the old payment method</li>
-                  </ol>
-                  <p className="text-sm text-orange-700 mt-2 italic">
-                    This ensures uninterrupted service during the transition.
-                  </p>
-                </div>
                 <p className="text-sm text-orange-700 mb-4 font-medium">
                   ⚠️ Your existing accounts remain, but WhatsApp connections are disabled until payment is completed.
                 </p>
@@ -365,7 +365,7 @@ export default function SubscriptionPage() {
                       <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                       </svg>
-                      Pay Invoice & Manage Payment Method
+                      Pay Invoice Now
                     </>
                   )}
                 </button>

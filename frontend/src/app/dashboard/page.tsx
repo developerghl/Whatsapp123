@@ -6,11 +6,13 @@ import { supabase } from '@/lib/supabase'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import PaymentRenewalModal from '@/components/dashboard/PaymentRenewalModal'
+import { useToast } from '@/components/ui/ToastProvider'
 
 export default function Dashboard() {
   const { user } = useAuth()
   const searchParams = useSearchParams()
   const router = useRouter()
+  const toast = useToast()
   const [stats, setStats] = useState({
     totalAccounts: 0,
     activeConnections: 0,
@@ -19,7 +21,6 @@ export default function Dashboard() {
     activeRate: 0
   })
   const [loading, setLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
 
@@ -114,14 +115,31 @@ export default function Dashboard() {
   useEffect(() => {
     const error = searchParams.get('error')
     if (error === 'payment_failed') {
-      setErrorMessage('Payment failed. Please update your payment method to continue using the service.')
-      // Clear URL parameter
+      toast.showToast({
+        type: 'error',
+        title: 'Payment Failed',
+        message: 'Payment failed. Please update your payment method to continue using the service.',
+        durationMs: 6000
+      })
       router.replace('/dashboard')
     } else if (error === 'subscription_expired') {
-      setErrorMessage('Your subscription has expired. Please upgrade to continue.')
+      toast.showToast({
+        type: 'warning',
+        title: 'Subscription Expired',
+        message: 'Your subscription has expired. Please upgrade to continue.',
+        durationMs: 6000
+      })
+      router.replace('/dashboard')
+    } else if (error === 'location_exists') {
+      toast.showToast({
+        type: 'error',
+        title: 'Location Already Linked',
+        message: 'This location is already linked to another account. Please use a different GoHighLevel location.',
+        durationMs: 6000
+      })
       router.replace('/dashboard')
     }
-  }, [searchParams, router])
+  }, [searchParams, router, toast])
 
   if (loading) {
     return (
@@ -153,41 +171,6 @@ export default function Dashboard() {
         <p className="text-gray-600 mt-1">Overview of your WhatsApp Business integration</p>
       </div>
 
-      {/* Error Messages */}
-      {errorMessage && (
-        <div className="bg-gradient-to-r from-red-50 to-orange-50 rounded-2xl border border-red-200 p-6 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start">
-              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
-                <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-red-900 mb-1">Payment Failed</h3>
-                <p className="text-sm text-red-800 mb-3">{errorMessage}</p>
-                <Link
-                  href="/dashboard/subscription"
-                  className="inline-flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-all shadow-sm hover:shadow-md"
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                  </svg>
-                  Update Payment Method
-                </Link>
-              </div>
-            </div>
-            <button
-              onClick={() => setErrorMessage(null)}
-              className="text-red-400 hover:text-red-600 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Stats Grid - Apple/Stripe Minimalist Style */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -275,15 +258,25 @@ export default function Dashboard() {
 
           <button
             onClick={() => {
-              if (subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled') {
-                setShowPaymentModal(true)
+              if (subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled' || subscriptionStatus === 'expired') {
+                if (subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled') {
+                  setShowPaymentModal(true)
+                } else {
+                  router.push('/dashboard/subscription')
+                }
               } else {
                 window.location.href = '/dashboard/add-subaccount'
               }
             }}
-            disabled={subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled'}
+            disabled={subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled' || subscriptionStatus === 'expired'}
             className="group p-6 bg-gradient-to-br from-gray-50 to-white border-2 border-gray-200 hover:border-green-400 rounded-xl transition-all duration-200 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed text-left w-full"
-            title={subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled' ? 'Payment required to add new accounts' : ''}
+            title={
+              subscriptionStatus === 'expired' 
+                ? 'Your subscription has expired. Please upgrade to add accounts.'
+                : subscriptionStatus === 'past_due' || subscriptionStatus === 'cancelled'
+                ? 'Payment required to add new accounts'
+                : ''
+            }
           >
             <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-600 transition-colors">
               <svg className="w-5 h-5 text-green-600 group-hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">

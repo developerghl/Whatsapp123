@@ -6,15 +6,18 @@ import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { apiCall, API_ENDPOINTS } from '@/lib/config'
 import PaymentRenewalModal from '@/components/dashboard/PaymentRenewalModal'
+import { useToast } from '@/components/ui/ToastProvider'
 
 export default function AddSubAccount() {
   const { user } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [subscriptionStatus, setSubscriptionStatus] = useState<{
     status: string
     trialEndsAt?: string
+    subscriptionEndsAt?: string
   } | null>(null)
   const [subscriptionInfo, setSubscriptionInfo] = useState<{
     subscription_status: string
@@ -40,7 +43,7 @@ export default function AddSubAccount() {
         // FAST CHECK: Direct DB query first (immediate)
         const { data: quickData, error: quickError } = await supabase
           .from('users')
-          .select('subscription_status, trial_ends_at')
+          .select('subscription_status, trial_ends_at, subscription_ends_at')
           .eq('id', user.id)
           .single()
 
@@ -48,7 +51,8 @@ export default function AddSubAccount() {
           // Set status immediately to block button
           setSubscriptionStatus({
             status: quickData.subscription_status || 'trial',
-            trialEndsAt: quickData.trial_ends_at
+            trialEndsAt: quickData.trial_ends_at,
+            subscriptionEndsAt: quickData.subscription_ends_at
           })
           setChecking(false) // Allow button interaction after quick check
         }
@@ -64,7 +68,8 @@ export default function AddSubAccount() {
             if (data.subscription_status) {
               setSubscriptionStatus({
                 status: data.subscription_status || 'trial',
-                trialEndsAt: data.trial_ends_at
+                trialEndsAt: data.trial_ends_at,
+                subscriptionEndsAt: data.subscription_ends_at
               })
             }
           }
@@ -81,22 +86,45 @@ export default function AddSubAccount() {
     checkSubscription()
   }, [user])
 
-  // Check URL params for payment_failed error
+  // Check URL params for payment_failed and subscription_expired errors
   useEffect(() => {
     const error = searchParams.get('error')
     const status = searchParams.get('status')
+    
     if (error === 'payment_failed' && (status === 'past_due' || status === 'cancelled')) {
       setShowPaymentModal(true)
       // Clear URL params
       router.replace('/dashboard/add-subaccount')
+    } else if (error === 'subscription_expired') {
+      toast.showToast({
+        type: 'warning',
+        title: 'Subscription Expired',
+        message: 'Your subscription has expired. Please upgrade to add accounts.',
+        durationMs: 5000
+      })
+      // Clear URL params
+      router.replace('/dashboard/add-subaccount')
     }
-  }, [searchParams, router])
+  }, [searchParams, router, toast])
 
   // Helper to check if trial/subscription is expired
   const isExpired = (): boolean => {
     if (!subscriptionStatus) return false
     if (subscriptionStatus.status === 'expired') return true
-    if (subscriptionStatus.status === 'cancelled') return true
+    
+    // Check if cancelled subscription has passed subscription_ends_at
+    if (subscriptionStatus.status === 'cancelled' && subscriptionStatus.subscriptionEndsAt) {
+      try {
+        const endsAt = new Date(subscriptionStatus.subscriptionEndsAt)
+        const now = new Date()
+        if (endsAt <= now) {
+          return true // Subscription period ended
+        }
+      } catch {
+        // If date parsing fails, treat as expired if status is cancelled
+        return true
+      }
+    }
     
     // Only check trial_ends_at if user is actually on trial/free plan
     // Active subscriptions (starter/professional) should NOT be blocked by old trial dates
@@ -123,7 +151,11 @@ export default function AddSubAccount() {
     try {
       // Check if user is logged in
       if (!user?.id) {
-        alert('❌ Please login first to add your GHL account')
+        toast.showToast({
+          type: 'error',
+          title: 'Login Required',
+          message: 'Please login first to add your GHL account'
+        })
         setLoading(false)
         return
       }
@@ -137,7 +169,11 @@ export default function AddSubAccount() {
 
       // Check if trial/subscription is expired
       if (isExpired()) {
-        alert('⚠️ Your trial has expired. Please upgrade your subscription to add accounts.')
+        toast.showToast({
+          type: 'warning',
+          title: 'Trial Expired',
+          message: 'Your trial has expired. Please upgrade your subscription to add accounts.'
+        })
         router.push('/dashboard/subscription')
         setLoading(false)
         return
@@ -145,7 +181,11 @@ export default function AddSubAccount() {
 
       // Check if subscription status is expired
       if (subscriptionStatus?.status === 'expired') {
-        alert('⚠️ Your subscription has expired. Please upgrade to continue using WhatsApp Integration.')
+        toast.showToast({
+          type: 'warning',
+          title: 'Subscription Expired',
+          message: 'Your subscription has expired. Please upgrade to continue using WhatsApp Integration.'
+        })
         router.push('/dashboard/subscription')
         setLoading(false)
         return
@@ -156,12 +196,26 @@ export default function AddSubAccount() {
         const availableCount = subscriptionInfo.previously_owned_locations?.length || 0
         
         if (availableCount > 0) {
-          alert(`⚠️ You've reached your subaccount limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}).\n\nYou can only re-add one of your ${availableCount} previously owned location(s), or purchase an additional subaccount for $4 (Professional Plan only).\n\nPlease go back to the dashboard and use the "Add Account" button to see your options.`)
+          toast.showToast({
+            type: 'warning',
+            title: 'Subaccount Limit Reached',
+            message: `You've reached your limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}). You can re-add one of your ${availableCount} previously owned location(s), or purchase an additional subaccount.`,
+            durationMs: 6000
+          })
         } else {
           if (subscriptionInfo.subscription_status === 'active') {
-            alert(`⚠️ You've reached your subaccount limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}).\n\nPlease go back to the dashboard and purchase an additional subaccount for $4 (Professional Plan only) to add a new location.`)
+            toast.showToast({
+              type: 'warning',
+              title: 'Subaccount Limit Reached',
+              message: `You've reached your limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}). Purchase an additional subaccount for $4 (Professional Plan only).`,
+              durationMs: 6000
+            })
           } else {
-            alert(`⚠️ You've reached your trial subaccount limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}).\n\nPlease upgrade your subscription to add more locations.`)
+            toast.showToast({
+              type: 'warning',
+              title: 'Trial Limit Reached',
+              message: `You've reached your trial limit (${subscriptionInfo.current_subaccounts}/${subscriptionInfo.max_subaccounts}). Please upgrade your subscription.`
+            })
             router.push('/dashboard/subscription')
           }
         }
@@ -186,7 +240,11 @@ export default function AddSubAccount() {
       
     } catch (error) {
       console.error('Error starting OAuth:', error)
-      alert('Failed to start OAuth connection')
+      toast.showToast({
+        type: 'error',
+        title: 'Connection Failed',
+        message: 'Failed to start OAuth connection. Please try again.'
+      })
     } finally {
       setLoading(false)
     }
@@ -194,10 +252,11 @@ export default function AddSubAccount() {
 
   if (checking) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent mx-auto mb-4"></div>
-          <p className="text-gray-600">Checking subscription status...</p>
+          <p className="text-gray-600 font-medium">Loading...</p>
+          <p className="text-sm text-gray-500 mt-2">Checking subscription status</p>
         </div>
       </div>
     )

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { Fragment } from 'react'
 import { API_ENDPOINTS, apiCall } from '@/lib/config'
+import { useToast } from '@/components/ui/ToastProvider'
 
 interface PaymentRenewalModalProps {
   isOpen: boolean
@@ -17,6 +18,7 @@ export default function PaymentRenewalModal({
   subscriptionStatus
 }: PaymentRenewalModalProps) {
   const [loading, setLoading] = useState(false)
+  const toast = useToast()
 
   const handleOpenStripePortal = async () => {
     setLoading(true)
@@ -34,15 +36,27 @@ export default function PaymentRenewalModal({
           // Redirect to Stripe Customer Portal
           window.location.href = data.url
         } else {
-          alert('Failed to get billing portal URL')
+          toast.showToast({
+            type: 'error',
+            title: 'Error',
+            message: 'Failed to get billing portal URL'
+          })
         }
       } else {
         const error = await response.json()
-        alert(error.error || 'Failed to open billing portal')
+        toast.showToast({
+          type: 'error',
+          title: 'Error',
+          message: error.error || 'Failed to open billing portal'
+        })
       }
     } catch (error) {
       console.error('Error opening Stripe portal:', error)
-      alert('Failed to open billing portal')
+      toast.showToast({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to open billing portal'
+      })
     } finally {
       setLoading(false)
     }

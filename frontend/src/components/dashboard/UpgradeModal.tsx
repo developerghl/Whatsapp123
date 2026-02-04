@@ -4,6 +4,7 @@ import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { useAuth } from '@/hooks/useAuth'
 import { API_ENDPOINTS } from '@/lib/config'
+import { useToast } from '@/components/ui/ToastProvider'
 
 interface UpgradeModalProps {
   isOpen: boolean
@@ -23,11 +24,16 @@ export default function UpgradeModal({
   showAdditionalSubaccount = false
 }: UpgradeModalProps) {
   const { user } = useAuth()
+  const toast = useToast()
   const [loading, setLoading] = useState<string | null>(null)
 
   const handleAdditionalSubaccount = async () => {
     if (!user?.id) {
-      alert('Please login to purchase additional subaccount')
+      toast.showToast({
+        type: 'error',
+        title: 'Login Required',
+        message: 'Please login to purchase additional subaccount'
+      })
       return
     }
 
@@ -66,14 +72,22 @@ export default function UpgradeModal({
       }
     } catch (error) {
       console.error('Error purchasing additional subaccount:', error)
-      alert(error instanceof Error ? error.message : 'Failed to start checkout. Please try again.')
+      toast.showToast({
+        type: 'error',
+        title: 'Checkout Failed',
+        message: error instanceof Error ? error.message : 'Failed to start checkout. Please try again.'
+      })
       setLoading(null)
     }
   }
 
   const handleUpgrade = async (plan: 'starter' | 'professional') => {
     if (!user?.id) {
-      alert('Please login to upgrade')
+      toast.showToast({
+        type: 'error',
+        title: 'Login Required',
+        message: 'Please login to upgrade'
+      })
       return
     }
 
@@ -115,7 +129,11 @@ export default function UpgradeModal({
       }
     } catch (error) {
       console.error('Error creating checkout:', error)
-      alert(error instanceof Error ? error.message : 'Failed to start checkout. Please try again.')
+      toast.showToast({
+        type: 'error',
+        title: 'Checkout Failed',
+        message: error instanceof Error ? error.message : 'Failed to start checkout. Please try again.'
+      })
       setLoading(null)
     }
   }
