@@ -6907,6 +6907,56 @@ setInterval(async () => {
 dripQueueProcessor.start();
 console.log('✅ Drip Queue Processor started');
 
+// Get Stripe invoices for a user
+app.get('/api/stripe/invoices', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Get user's Stripe customer ID
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.stripe_customer_id || !stripe) {
+      return res.json({ invoices: [] });
+    }
+
+    // Fetch invoices from Stripe
+    const invoices = await stripe.invoices.list({
+      customer: user.stripe_customer_id,
+      limit: 100, // Get last 100 invoices
+      expand: ['data.subscription', 'data.payment_intent']
+    });
+
+    // Format invoices for frontend
+    const formattedInvoices = invoices.data.map(invoice => ({
+      id: invoice.id,
+      number: invoice.number,
+      amount: invoice.amount_paid || invoice.amount_due,
+      currency: invoice.currency.toUpperCase(),
+      status: invoice.status,
+      created: new Date(invoice.created * 1000).toISOString(),
+      due_date: invoice.due_date ? new Date(invoice.due_date * 1000).toISOString() : null,
+      paid_at: invoice.status_transitions.paid_at ? new Date(invoice.status_transitions.paid_at * 1000).toISOString() : null,
+      invoice_pdf: invoice.invoice_pdf,
+      hosted_invoice_url: invoice.hosted_invoice_url,
+      description: invoice.description || invoice.lines.data[0]?.description || 'Subscription payment',
+      plan: invoice.lines.data[0]?.plan?.nickname || invoice.lines.data[0]?.plan?.product || 'Subscription'
+    }));
+
+    res.json({ invoices: formattedInvoices });
+  } catch (error) {
+    console.error('Error fetching Stripe invoices:', error);
+    res.status(500).json({ error: 'Failed to fetch invoices' });
+  }
+});
+
 // Manual subscription sync endpoint (for frontend to trigger)
 app.post('/api/subscription/sync', requireAuth, async (req, res) => {
   try {

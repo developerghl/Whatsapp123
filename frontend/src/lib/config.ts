@@ -32,6 +32,7 @@ export const API_ENDPOINTS = {
   cancelSubscription: `${API_BASE_URL}/api/stripe/cancel-subscription`,
   customerPortal: `${API_BASE_URL}/api/stripe/customer-portal`,
   syncSubscription: `${API_BASE_URL}/api/subscription/sync`,
+  getInvoices: `${API_BASE_URL}/api/stripe/invoices`,
   
   // Subaccount settings endpoints
   getSubaccountSettings: (ghlAccountId: string) => `${API_BASE_URL}/admin/subaccount/${ghlAccountId}/settings`,
