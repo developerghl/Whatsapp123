@@ -7190,12 +7190,19 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
     // Get user's Stripe subscription ID
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, stripe_subscription_id, subscription_status, subscription_plan')
+      .select('id, stripe_subscription_id, subscription_status, subscription_plan, is_manual_subscription')
       .eq('id', userId)
       .single();
 
     if (userError || !user) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.is_manual_subscription) {
+      return res.json({ 
+        synced: false, 
+        message: 'Manual subscription - not synced with Stripe' 
+      });
     }
 
     if (!user.stripe_subscription_id || !stripe) {
@@ -7373,7 +7380,7 @@ async function syncSubscriptionStatuses() {
     // Get all users with Stripe subscriptions
     const { data: users, error } = await supabaseAdmin
       .from('users')
-      .select('id, stripe_subscription_id, subscription_status, subscription_plan')
+      .select('id, stripe_subscription_id, subscription_status, subscription_plan, is_manual_subscription')
       .not('stripe_subscription_id', 'is', null);
 
     if (error) {
@@ -7391,6 +7398,11 @@ async function syncSubscriptionStatuses() {
     let updatedCount = 0;
     for (const user of users) {
       try {
+        // Skip manual subscriptions - these are managed directly in database
+        if (user.is_manual_subscription) {
+          console.log(`⏭️ Skipping manual subscription for user ${user.id}`);
+          continue;
+        }
         const stripeSubscription = await stripe.subscriptions.retrieve(user.stripe_subscription_id);
         let stripeStatus = stripeSubscription.status;
         const cancelAtPeriodEnd = stripeSubscription.cancel_at_period_end || false;
