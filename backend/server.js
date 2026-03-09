@@ -1,4 +1,4 @@
-﻿// Suppress Node.js deprecation warnings from dependencies
+// Suppress Node.js deprecation warnings from dependencies
 // These warnings come from third-party packages (like Baileys) and don't affect functionality
 process.removeAllListeners('warning');
 process.on('warning', (warning) => {
@@ -20,6 +20,7 @@ const qrcode = require('qrcode');
 const { processWhatsAppMedia } = require('./mediaHandler');
 const axios = require('axios');
 const Stripe = require('stripe');
+const rateLimit = require('express-rate-limit');
 // Import Baileys functions for media decryption
 const { downloadMediaMessage, downloadContentFromMessage } = require('@whiskeysockets/baileys');
 // Import subaccount helpers
@@ -29,6 +30,18 @@ const dripQueueProcessor = require('./lib/drip-queue-processor');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many attempts, please try again after 15 minutes' }
+});
+
+const passwordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many attempts, please try again after 15 minutes' }
+});
 
 // Supabase configuration
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -447,6 +460,19 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
         const planType = session.metadata?.plan_type; // 'starter' or 'professional'
         const paymentType = session.metadata?.payment_type || 'recurring'; // 'recurring' or 'one-time'
         const isAdditionalSubaccount = session.metadata?.additional_subaccount === 'true';
+
+        // Check if this event was already processed
+        const { data: alreadyProcessed } = await supabaseAdmin
+          .from('subscription_events')
+          .select('id')
+          .eq('event_type', 'upgrade')
+          .filter('metadata->stripe_session_id', 'eq', session.id)
+          .maybeSingle();
+
+        if (alreadyProcessed) {
+          console.log('⚠️ Duplicate Stripe event, skipping:', session.id);
+          return res.json({ received: true });
+        }
 
         // Handle additional subaccount purchase
         if (isAdditionalSubaccount && userId) {
@@ -1013,45 +1039,6 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
         break;
       }
 
-      case 'invoice.payment_succeeded_OLD': {
-        const invoice = event.data.object;
-        const customerId = invoice.customer;
-
-        // Find user and update subscription status
-        const { data: user } = await supabaseAdmin
-          .from('users')
-          .select('id, subscription_plan')
-          .eq('stripe_customer_id', customerId)
-          .maybeSingle();
-
-        if (user) {
-          await supabaseAdmin
-            .from('users')
-            .update({
-              subscription_status: 'active'
-            })
-            .eq('id', user.id);
-
-          // Log payment success event
-          await supabaseAdmin.from('subscription_events').insert({
-            user_id: user.id,
-            event_type: 'payment_succeeded',
-            plan_name: user.subscription_plan || 'unknown',
-            metadata: {
-              invoice_id: invoice.id,
-              amount_paid: invoice.amount_paid,
-              currency: invoice.currency,
-              period_start: invoice.period_start,
-              period_end: invoice.period_end
-            }
-          });
-
-          console.log(`✅ Payment succeeded for user ${user.id}`);
-        }
-
-        break;
-      }
-
       default:
         console.log(`ℹ️ Unhandled event type: ${event.type}`);
     }
@@ -1082,8 +1069,11 @@ const requireAuth = async (req, res, next) => {
       try {
         // Verify JWT
         const jwt = require('jsonwebtoken');
-        const jwtSecret = process.env.JWT_SECRET || 'your-secret-key';
-        
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+          console.error('❌ FATAL: JWT_SECRET environment variable not set');
+          return res.status(500).json({ error: 'Server configuration error' });
+        }
         const decoded = jwt.verify(token, jwtSecret);
         
         if (decoded && decoded.userId) {
@@ -1955,7 +1945,7 @@ app.get('/api/user/subscription-info', requireAuth, async (req, res) => {
 // Admin routes
 // Password management endpoints
 // Change password (requires authentication)
-app.post('/api/auth/change-password', requireAuth, async (req, res) => {
+app.post('/api/auth/change-password', requireAuth, passwordLimiter, async (req, res) => {
   try {
     const userId = req.user.id;
     const { currentPassword, newPassword } = req.body;
@@ -2008,7 +1998,7 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
 });
 
 // Send OTP for password reset
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', otpLimiter, async (req, res) => {
   try {
     const { email } = req.body;
 
@@ -2033,13 +2023,15 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     const otp = generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
+    const hashedOtp = await hashPassword(otp);
+
     // Store OTP in database (create a password_resets table or use a simple cache)
     // For now, we'll store it in a password_resets table
     const { error: otpError } = await supabaseAdmin
       .from('password_resets')
       .upsert({
         email: user.email,
-        otp: otp,
+        otp: hashedOtp,
         expires_at: expiresAt.toISOString(),
         used: false
       }, {
@@ -2198,7 +2190,7 @@ This is an automated email from Octendr.
 });
 
 // Verify OTP and reset password
-app.post('/api/auth/reset-password', async (req, res) => {
+app.post('/api/auth/reset-password', otpLimiter, async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
 
@@ -2223,7 +2215,8 @@ app.post('/api/auth/reset-password', async (req, res) => {
     }
 
     // Check if OTP matches
-    if (resetData.otp !== otp) {
+    const isValidOtp = await verifyPassword(otp, resetData.otp);
+    if (!isValidOtp) {
       return res.status(400).json({ error: 'Invalid OTP' });
     }
 
@@ -2276,7 +2269,7 @@ app.get('/admin/ghl/subaccounts', requireAuth, async (req, res) => {
   try {
     // req.user already set by requireAuth middleware
     const { data: subaccounts } = await supabaseAdmin
-      .from('subaccounts')
+      .from('ghl_accounts')
       .select('*')
       .eq('user_id', req.user.id);
 
@@ -2627,47 +2620,14 @@ app.post('/admin/ghl/connect-subaccount', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'ghl_location_id is required' });
     }
 
-    // Check if subaccount already exists
-    const { data: existingSubaccount } = await supabaseAdmin
-      .from('subaccounts')
-      .select('*')
-      .eq('ghl_location_id', ghl_location_id)
-      .eq('user_id', req.user.id)
-      .maybeSingle();
-
-    if (existingSubaccount) {
-      return res.json({ 
-        success: true, 
-        message: 'Subaccount already exists',
-        subaccount: existingSubaccount
-      });
-    }
-
-    // Create subaccount
-    const { data: newSubaccount, error: subaccountError } = await supabaseAdmin
-        .from('subaccounts')
-      .insert({
-        user_id: req.user.id,
-        ghl_location_id,
-        name: name || `Location ${ghl_location_id}`,
-        status: 'pending_oauth'
-        })
-        .select()
-        .single();
-
-    if (subaccountError) {
-      console.error('Error creating subaccount:', subaccountError);
-      return res.status(500).json({ error: 'Failed to create subaccount' });
-    }
-
+    // DEPRECATED: Use OAuth callback flow instead
     // Generate GHL OAuth URL for this specific location
-    const authUrl = `https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}&state=${encodeURIComponent(user.id)}`;
+    const authUrl = `https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}&state=${encodeURIComponent(req.user.id)}`;
 
-  res.json({ 
-      success: true, 
-      message: 'Subaccount created, redirect to GHL OAuth',
-      authUrl: authUrl,
-      subaccount: newSubaccount
+    return res.json({ 
+      success: false, 
+      message: 'Please use GHL OAuth flow to connect subaccounts',
+      authUrl: authUrl 
     });
   } catch (error) {
     console.error('Error connecting subaccount:', error);
@@ -2805,11 +2765,38 @@ app.post('/ghl/provider/webhook', async (req, res) => {
     }
     
     console.log('✅ Processing OutboundMessage webhook');
+
+    const locationId = req.body.locationId;
+
+    // Only process if this location has an active WhatsApp session
+    const { data: webhookGhlAccount } = await supabaseAdmin
+      .from('ghl_accounts')
+      .select('id')
+      .eq('location_id', locationId)
+      .maybeSingle();
+
+    if (!webhookGhlAccount) {
+      console.log(`⏭️ No GHL account found for location ${locationId} - skipping`);
+      return res.json({ status: 'skipped', reason: 'no_ghl_account' });
+    }
+
+    const { data: activeSession } = await supabaseAdmin
+      .from('sessions')
+      .select('id, status')
+      .eq('subaccount_id', webhookGhlAccount.id)
+      .eq('status', 'ready')
+      .maybeSingle();
+
+    if (!activeSession) {
+      console.log(`⏭️ No active WhatsApp session for location ${locationId} - skipping`);
+      return res.json({ status: 'skipped', reason: 'no_active_session' });
+    }
+
     console.log('📋 Webhook Debug - Full request body:', JSON.stringify(req.body, null, 2));
     
     // Process OutboundMessage - actual messages from GHL
     // GHL OutboundMessage may have phone in different fields, check all possibilities
-    const { locationId, message, contactId, phone, attachments = [], body, messageId, conversationId } = req.body;
+    const { message, contactId, phone, attachments = [], body, messageId, conversationId } = req.body;
     
     // Use 'body' field if 'message' is not available (GHL uses 'body' for OutboundMessage)
     const messageText = message || body || '';
@@ -4682,7 +4669,11 @@ app.get('/admin/ghl/account-status', async (req, res) => {
     }
     
     const jwt = require('jsonwebtoken');
-    const jwtSecret = process.env.JWT_SECRET || 'your-secret-key';
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      console.error('❌ FATAL: JWT_SECRET environment variable not set');
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
     let userId = null;
     
       try {
@@ -4725,7 +4716,11 @@ app.get('/admin/ghl/locations', async (req, res) => {
     }
     
     const jwt = require('jsonwebtoken');
-    const jwtSecret = process.env.JWT_SECRET || 'your-secret-key';
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      console.error('❌ FATAL: JWT_SECRET environment variable not set');
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
     let userId = null;
     
     try {
@@ -5573,9 +5568,9 @@ app.post('/ghl/provider/messages', async (req, res) => {
 
     // Find subaccount and session
     const { data: subaccount } = await supabaseAdmin
-      .from('subaccounts')
+      .from('ghl_accounts')
       .select('*')
-      .eq('ghl_location_id', locationId)
+      .eq('location_id', locationId)
       .maybeSingle();
 
     if (!subaccount) {
@@ -6920,17 +6915,10 @@ async function checkAndProcessExpiredSubscriptions() {
 
     console.log(`📋 Found ${expiredUsers.length} expired subscription(s)/trial(s)`);
 
-    if (fetchError) {
-      console.error('❌ Error fetching expired trials:', fetchError);
+    if (trialError || subError) {
+      console.error('❌ Error fetching expired trials:', trialError || subError);
       return;
     }
-
-    if (!expiredUsers || expiredUsers.length === 0) {
-      console.log('✅ No expired trials found');
-      return;
-    }
-
-    console.log(`📋 Found ${expiredUsers.length} expired trial(s)`);
 
     for (const user of expiredUsers) {
       try {
@@ -7643,6 +7631,10 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`GHL OAuth URL: https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}`);
   
+  if (!process.env.JWT_SECRET) {
+    console.error('❌ FATAL: JWT_SECRET not set — authentication will fail!');
+  }
+
   // Validate environment variables (non-blocking)
   validateEnvironment();
 });

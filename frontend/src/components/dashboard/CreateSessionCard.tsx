@@ -17,10 +17,13 @@ interface Session {
   mode?: 'qr' | 'pairing'; // Session mode
 }
 
-interface Subaccount {
+type Subaccount = {
   id: string;
-  ghl_location_id: string;
-  name: string;
+  user_id: string;
+  location_id: string;
+  company_id: string;
+  conversation_provider_id: string | null;
+  created_at: string;
 }
 
 export default function CreateSessionCard({ subaccountId }: CreateSessionCardProps) {
@@ -51,7 +54,7 @@ export default function CreateSessionCard({ subaccountId }: CreateSessionCardPro
       }
 
       // Open backend provider page with mode parameter
-      const providerUrl = `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}/ghl/provider?locationId=${subaccount.ghl_location_id}&mode=${mode}`;
+      const providerUrl = `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}/ghl/provider?locationId=${subaccount.location_id}&mode=${mode}`;
       window.open(providerUrl, '_blank', 'width=600,height=800');
       
       setIsCreating(false);

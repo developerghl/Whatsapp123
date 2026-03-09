@@ -5,7 +5,14 @@ import { Database } from '@/lib/supabase'
 import Image from 'next/image'
 
 type Session = Database['public']['Tables']['sessions']['Row']
-type Subaccount = Database['public']['Tables']['subaccounts']['Row']
+type Subaccount = {
+  id: string;
+  user_id: string;
+  location_id: string;
+  company_id: string;
+  conversation_provider_id: string | null;
+  created_at: string;
+}
 
 interface SessionsListProps {
   sessions: Session[]
