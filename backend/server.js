@@ -112,7 +112,6 @@ async function refreshGHLToken(ghlAccount) {
       .update({
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
-        expires_at: expiryTimestamp,  // Old column
         token_expires_at: expiryTimestamp  // New column
       })
       .eq('id', ghlAccount.id);
@@ -1760,7 +1759,6 @@ app.get('/oauth/callback', async (req, res) => {
         access_token: tokenData.access_token,
         refresh_token: tokenData.refresh_token,
         location_id: finalLocationId,
-        expires_at: expiryTimestamp,  // Old column (required)
         token_expires_at: expiryTimestamp  // New column (for auto-refresh)
       });
 
