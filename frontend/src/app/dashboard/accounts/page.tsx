@@ -152,6 +152,15 @@ export default function AccountsPage() {
     fetchGHLLocations()
   }, [fetchGHLLocations])
 
+  // Auto-refresh account statuses periodically so QR scans reflect without manual refresh
+  useEffect(() => {
+    if (!user) return
+    const interval = setInterval(() => {
+      fetchGHLLocations(false)
+    }, 10000) // every 10 seconds
+    return () => clearInterval(interval)
+  }, [user, fetchGHLLocations])
+
   const handleRefresh = async () => {
     setRefreshing(true)
     await fetchGHLLocations(false)
