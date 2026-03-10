@@ -69,15 +69,15 @@ async function refreshGHLToken(ghlAccount) {
     console.log(`🔑 Using refresh token: ${ghlAccount.refresh_token ? 'Present' : 'Missing'}`);
     console.log(`🔑 Client ID: ${GHL_CLIENT_ID ? 'Present' : 'Missing'}`);
     console.log(`🔑 Client Secret: ${GHL_CLIENT_SECRET ? 'Present' : 'Missing'}`);
-    
+
     if (!ghlAccount.refresh_token) {
       throw new Error('No refresh token available');
     }
-    
+
     if (!GHL_CLIENT_ID || !GHL_CLIENT_SECRET) {
       throw new Error('GHL client credentials not configured');
     }
-    
+
     // GHL OAuth requires form-urlencoded format
     const formData = new URLSearchParams();
     formData.append('grant_type', 'refresh_token');
@@ -94,7 +94,7 @@ async function refreshGHLToken(ghlAccount) {
     });
 
     console.log(`📊 Token refresh response status: ${response.status}`);
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ Token refresh failed: ${response.status} - ${errorText}`);
@@ -103,9 +103,9 @@ async function refreshGHLToken(ghlAccount) {
 
     const tokenData = await response.json();
     console.log(`✅ Token refresh successful, expires in: ${tokenData.expires_in} seconds`);
-    
+
     const expiryTimestamp = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
-    
+
     // Update token in database
     const { error } = await supabaseAdmin
       .from('ghl_accounts')
@@ -123,7 +123,7 @@ async function refreshGHLToken(ghlAccount) {
 
     console.log(`✅ Token refreshed and saved successfully for GHL account: ${ghlAccount.id}`);
     return tokenData.access_token;
-    
+
   } catch (error) {
     console.error(`❌ Token refresh failed for GHL account ${ghlAccount.id}:`, error);
     throw error;
@@ -161,19 +161,19 @@ async function ensureValidToken(ghlAccount, forceRefresh = false) {
       console.log(`🔄 Force refreshing token for GHL account ${ghlAccount.id}`);
       return await refreshGHLToken(ghlAccount);
     }
-    
+
     // Check if token is expired or about to expire (within 1 hour)
     if (ghlAccount.token_expires_at) {
       const now = new Date();
       const expiresAt = new Date(ghlAccount.token_expires_at);
       const oneHourFromNow = new Date(now.getTime() + (60 * 60 * 1000));
-      
+
       if (expiresAt <= oneHourFromNow) {
         console.log(`🔄 Token expired or expiring soon for GHL account ${ghlAccount.id} (expires at: ${expiresAt.toISOString()})`);
         return await refreshGHLToken(ghlAccount);
       }
     }
-    
+
     console.log(`✅ Using valid token for GHL account ${ghlAccount.id} (expires: ${ghlAccount.token_expires_at})`);
     return ghlAccount.access_token;
   } catch (error) {
@@ -186,35 +186,35 @@ async function ensureValidToken(ghlAccount, forceRefresh = false) {
 // Helper function to make GHL API calls with automatic token refresh on 401
 async function makeGHLRequest(url, options, ghlAccount, retryCount = 0) {
   const MAX_RETRIES = 1;
-  
+
   try {
     const response = await fetch(url, options);
-    
+
     // If 401 and we haven't retried yet, refresh token and retry
     if (response.status === 401 && retryCount < MAX_RETRIES) {
       console.log(`🔄 Got 401 error, refreshing token and retrying... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
-      
+
       // Refresh token
       const newToken = await refreshGHLToken(ghlAccount);
-      
+
       // Update authorization header with new token
       options.headers.Authorization = `Bearer ${newToken}`;
-      
+
       // Fetch updated ghl account data from database to ensure consistency
       const { data: updatedAccount } = await supabaseAdmin
         .from('ghl_accounts')
         .select('*')
         .eq('id', ghlAccount.id)
         .single();
-      
+
       if (updatedAccount) {
         console.log(`✅ Using refreshed token from database (expires: ${updatedAccount.token_expires_at})`);
       }
-      
+
       // Retry the request
       return await makeGHLRequest(url, options, updatedAccount || ghlAccount, retryCount + 1);
     }
-    
+
     return response;
   } catch (error) {
     console.error(`❌ Request failed:`, error);
@@ -234,7 +234,7 @@ const emailService = require('./lib/email');
 setInterval(async () => {
   try {
     console.log('🔄 Running scheduled token refresh...');
-    
+
     const { data: ghlAccounts } = await supabaseAdmin
       .from('ghl_accounts')
       .select('*')
@@ -255,7 +255,7 @@ setInterval(async () => {
         console.error(`❌ Token refresh failed for GHL account ${account.id}:`, error);
       }
     }
-    
+
     console.log('✅ Scheduled token refresh completed');
   } catch (error) {
     console.error('❌ Scheduled token refresh error:', error);
@@ -266,7 +266,7 @@ setInterval(async () => {
 setInterval(async () => {
   try {
     console.log('🔄 Running aggressive token refresh...');
-    
+
     const { data: ghlAccounts } = await supabaseAdmin
       .from('ghl_accounts')
       .select('*')
@@ -282,7 +282,7 @@ setInterval(async () => {
         const now = new Date();
         const expiresAt = new Date(account.token_expires_at);
         const eightHoursFromNow = new Date(now.getTime() + (8 * 60 * 60 * 1000));
-        
+
         if (expiresAt <= eightHoursFromNow) {
           console.log(`🔄 Aggressive refresh for account ${account.id} (expires in ${Math.round((expiresAt - now) / (60 * 60 * 1000))} hours)`);
           await refreshGHLToken(account);
@@ -300,7 +300,7 @@ setInterval(async () => {
 async function restoreWhatsAppClients() {
   try {
     console.log('🔄 Restoring WhatsApp clients from database...');
-    
+
     const { data: sessions, error } = await supabaseAdmin
       .from('sessions')
       .select('*')
@@ -323,16 +323,16 @@ async function restoreWhatsAppClients() {
       try {
         const cleanSubaccountId = session.subaccount_id.replace(/[^a-zA-Z0-9_-]/g, '_');
         const sessionName = `location_${cleanSubaccountId}_${session.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-        
+
         console.log(`🔄 Restoring client for session: ${sessionName}`);
         await waManager.createClient(sessionName);
-        
+
         // Wait a bit for client to initialize
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
+
         const status = waManager.getClientStatus(sessionName);
         console.log(`📊 Client status for ${sessionName}:`, status?.status);
-        
+
       } catch (error) {
         console.error(`❌ Error restoring client for session ${session.id}:`, error);
       }
@@ -340,7 +340,7 @@ async function restoreWhatsAppClients() {
 
     console.log('✅ WhatsApp client restoration completed');
     console.log('📊 Active clients:', waManager.getAllClients().map(c => c.sessionId));
-    
+
   } catch (error) {
     console.error('❌ Error in client restoration:', error);
   }
@@ -371,7 +371,7 @@ app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, curl, postman)
     if (!origin) return callback(null, true);
-    
+
     // List of allowed origins
     const allowedOrigins = [
       'http://localhost:3000',
@@ -386,14 +386,14 @@ app.use(cors({
       'https://dashboard.octendr.com',
       'https://api.octendr.com'
     ];
-    
+
     // Check if origin is in allowed list OR matches pattern
-    const isAllowed = allowedOrigins.includes(origin) || 
-                      origin.endsWith('.vercel.app') || 
-                      origin.endsWith('.onrender.com') ||
-                      origin.endsWith('.gohighlevel.com') ||
-                      origin.endsWith('.octendr.com');
-    
+    const isAllowed = allowedOrigins.includes(origin) ||
+      origin.endsWith('.vercel.app') ||
+      origin.endsWith('.onrender.com') ||
+      origin.endsWith('.gohighlevel.com') ||
+      origin.endsWith('.octendr.com');
+
     if (isAllowed) {
       callback(null, true);
     } else {
@@ -454,7 +454,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
-        
+
         const userId = session.metadata?.user_id;
         const planType = session.metadata?.plan_type; // 'starter' or 'professional'
         const paymentType = session.metadata?.payment_type || 'recurring'; // 'recurring' or 'one-time'
@@ -476,7 +476,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
         // Handle additional subaccount purchase
         if (isAdditionalSubaccount && userId) {
           const currentMax = parseInt(session.metadata?.current_max || '0');
-          
+
           // Get current user info
           const { data: userInfo } = await supabaseAdmin
             .from('users')
@@ -487,7 +487,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
           if (userInfo && userInfo.subscription_status === 'active') {
             // Increment max_subaccounts by 1
             const newMax = (userInfo.max_subaccounts || currentMax) + 1;
-            
+
             const { error: updateError } = await supabaseAdmin
               .from('users')
               .update({ max_subaccounts: newMax })
@@ -497,7 +497,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
               console.error('❌ Error updating max_subaccounts for additional subaccount:', updateError);
             } else {
               console.log(`✅ Additional subaccount purchased. User ${userId} max_subaccounts updated from ${userInfo.max_subaccounts} to ${newMax}`);
-              
+
               // Log the event
               await supabaseAdmin.from('subscription_events').insert({
                 user_id: userId,
@@ -512,7 +512,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
               });
             }
           }
-          
+
           return res.json({ received: true });
         }
 
@@ -578,7 +578,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
           user_id: userId,
           event_type: paymentType === 'one-time' ? 'one_time_payment' : 'upgrade',
           plan_name: planType,
-          metadata: { 
+          metadata: {
             stripe_session_id: session.id,
             stripe_customer_id: session.customer,
             stripe_subscription_id: session.subscription || null,
@@ -601,19 +601,43 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
           // Don't fail the webhook if email fails
         }
 
+        // Send internal admin notification
+        try {
+          const emailService = require('./lib/email');
+          // Fetch user email and name for admin notification
+          const { data: paidUser } = await supabaseAdmin
+            .from('users')
+            .select('email, name')
+            .eq('id', userId)
+            .maybeSingle();
+
+          await emailService.sendInternalPaymentNotification({
+            userId,
+            userEmail: paidUser?.email || session.customer_email || 'N/A',
+            userName: paidUser?.name || session.customer_details?.name || 'N/A',
+            planName: planType,
+            paymentType,
+            stripeSessionId: session.id,
+            stripeCustomerId: session.customer
+          });
+        } catch (notifyError) {
+          console.error('❌ Error sending internal payment notification:', notifyError);
+          // Don't fail the webhook if notification fails
+        }
+
         break;
       }
 
       case 'payment_intent.succeeded': {
         // Handle one-time payment success (if not handled by checkout.session.completed)
         const paymentIntent = event.data.object;
-        
+
         // Check if this payment was already handled by checkout.session.completed
         // This is a backup handler for one-time payments
         if (paymentIntent.metadata?.user_id) {
           const userId = paymentIntent.metadata.user_id;
           console.log(`✅ One-time payment succeeded for user ${userId}`);
-          
+
           // Log payment event
           await supabaseAdmin.from('subscription_events').insert({
             user_id: userId,
@@ -642,7 +666,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 
         if (user) {
           console.log(`⚠️ Payment failed for user ${user.id}`);
-          
+
           // Check subscription status in Stripe to get accurate status
           let subscriptionStatus = 'active'; // Default
           let cancelAtPeriodEnd = false;
@@ -652,14 +676,14 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
               subscriptionStatus = stripeSubscription.status; // 'active', 'past_due', 'unpaid', 'canceled', etc.
               cancelAtPeriodEnd = stripeSubscription.cancel_at_period_end || false;
               console.log(`📊 Stripe subscription status: ${subscriptionStatus}, cancel_at_period_end: ${cancelAtPeriodEnd}`);
-              
+
               // Check if there are any open invoices (pending payment)
               const openInvoices = await stripe.invoices.list({
                 customer: customerId,
                 status: 'open',
                 limit: 1
               });
-              
+
               // If there's an open invoice, it means payment is pending, not cancelled
               if (openInvoices.data.length > 0) {
                 console.log(`📄 Found ${openInvoices.data.length} open invoice(s) - payment is pending`);
@@ -700,13 +724,13 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
               .eq('id', user.id);
             console.log(`✅ Updated subscription status for user ${user.id}: ${JSON.stringify(statusUpdate)}`);
           }
-          
+
           // DISCONNECT ALL WHATSAPP SESSIONS when payment fails
           // Existing accounts remain but WhatsApp connections are disabled
           if (subscriptionStatus === 'past_due' || subscriptionStatus === 'unpaid' || subscriptionStatus === 'canceled') {
             try {
               console.log(`🔌 Disconnecting all WhatsApp sessions for user ${user.id} due to payment failure`);
-              
+
               // Get all GHL accounts for this user
               const { data: ghlAccounts } = await supabaseAdmin
                 .from('ghl_accounts')
@@ -715,7 +739,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 
               if (ghlAccounts && ghlAccounts.length > 0) {
                 let disconnectedCount = 0;
-                
+
                 for (const ghlAccount of ghlAccounts) {
                   // Get all sessions for this account
                   const { data: sessions } = await supabaseAdmin
@@ -730,13 +754,13 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
                         const sessionName = `subaccount_${ghlAccount.id}_${session.id}`;
                         await waManager.disconnectClient(sessionName);
                         waManager.clearSessionData(sessionName);
-                        
+
                         // Update database status
                         await supabaseAdmin
                           .from('sessions')
                           .update({ status: 'disconnected' })
                           .eq('id', session.id);
-                        
+
                         disconnectedCount++;
                         console.log(`✅ Disconnected session ${session.id} for account ${ghlAccount.id}`);
                       } catch (sessionError) {
@@ -751,7 +775,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
                     }
                   }
                 }
-                
+
                 console.log(`✅ Disconnected ${disconnectedCount} WhatsApp session(s) for user ${user.id}`);
               } else {
                 console.log(`ℹ️ No GHL accounts found for user ${user.id} to disconnect`);
@@ -761,7 +785,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
               // Don't fail the webhook if disconnect fails
             }
           }
-          
+
           // Log payment failure event
           await supabaseAdmin.from('subscription_events').insert({
             user_id: user.id,
@@ -815,13 +839,13 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
         // Determine plan from Stripe subscription items
         let planType = user.subscription_plan; // Default to existing plan
         let maxSubaccounts = 1; // Default to trial
-        
+
         if (subscription.items && subscription.items.data && subscription.items.data.length > 0) {
           const priceId = subscription.items.data[0].price.id;
           // Check if it's a known plan price ID (you may need to adjust these based on your Stripe price IDs)
           // For now, we'll use metadata or price amount to determine plan
           const priceAmount = subscription.items.data[0].price.unit_amount;
-          
+
           // Determine plan based on price (adjust these amounts based on your actual Stripe prices)
           if (priceAmount === 1900) { // $19.00 = Starter
             planType = 'starter';
@@ -830,7 +854,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
             planType = 'professional';
             maxSubaccounts = 10;
           }
-          
+
           // Also check metadata if available
           if (subscription.items.data[0].price.metadata?.plan_type) {
             planType = subscription.items.data[0].price.metadata.plan_type;
@@ -840,8 +864,8 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 
         // Update subscription end date and plan
         let statusUpdate = {
-          subscription_ends_at: subscription.current_period_end 
-            ? new Date(subscription.current_period_end * 1000).toISOString() 
+          subscription_ends_at: subscription.current_period_end
+            ? new Date(subscription.current_period_end * 1000).toISOString()
             : null
         };
 
@@ -864,14 +888,14 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
           // This ensures that when payment succeeds, status is immediately updated to active
           statusUpdate.subscription_status = 'active';
           statusUpdate.max_subaccounts = maxSubaccounts; // Restore based on plan
-          
+
           // Get current user status to determine event type
           const { data: currentUser } = await supabaseAdmin
             .from('users')
             .select('subscription_status')
             .eq('id', user.id)
             .single();
-          
+
           if (currentUser && (currentUser.subscription_status === 'past_due' || currentUser.subscription_status === 'cancelled')) {
             eventType = 'subscription_reactivated';
           } else {
@@ -887,8 +911,8 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
         } else if (subscription.cancel_at_period_end === true && subscription.status === 'active') {
           // Cancellation scheduled (user cancelled but still has access)
           statusUpdate.subscription_status = 'active'; // Stay active until period end
-          statusUpdate.subscription_ends_at = subscription.current_period_end 
-            ? new Date(subscription.current_period_end * 1000).toISOString() 
+          statusUpdate.subscription_ends_at = subscription.current_period_end
+            ? new Date(subscription.current_period_end * 1000).toISOString()
             : null;
           // Keep max_subaccounts as is (user still has access until period end)
           eventType = 'subscription_cancellation_scheduled';
@@ -984,15 +1008,15 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 
         if (user && subscriptionId) {
           console.log(`✅ Payment succeeded for user ${user.id}`);
-          
+
           try {
             // Get subscription from Stripe to verify status
             const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
-            
+
             // Always update to active if Stripe subscription is active (regardless of current database status)
             if (stripeSubscription.status === 'active') {
               const oldStatus = user.subscription_status;
-              
+
               // Determine max_subaccounts based on plan
               let maxSubaccounts = 1;
               if (stripeSubscription.items && stripeSubscription.items.data && stripeSubscription.items.data.length > 0) {
@@ -1002,27 +1026,27 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
                 } else if (priceAmount === 4900) {
                   maxSubaccounts = 10; // Professional
                 }
-                
+
                 // Check metadata if available
                 if (stripeSubscription.items.data[0].price.metadata?.plan_type) {
                   const planType = stripeSubscription.items.data[0].price.metadata.plan_type;
                   maxSubaccounts = planType === 'starter' ? 2 : planType === 'professional' ? 10 : 1;
                 }
               }
-              
+
               await supabaseAdmin
                 .from('users')
                 .update({
                   subscription_status: 'active',
                   max_subaccounts: maxSubaccounts,
-                  subscription_ends_at: stripeSubscription.current_period_end 
-                    ? new Date(stripeSubscription.current_period_end * 1000).toISOString() 
+                  subscription_ends_at: stripeSubscription.current_period_end
+                    ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
                     : null
                 })
                 .eq('id', user.id);
-              
+
               console.log(`✅ Updated subscription to active for user ${user.id} (was: ${oldStatus})`);
-              
+
               // If reactivating from past_due/cancelled, ensure subscription continues
               if (oldStatus === 'past_due' || oldStatus === 'cancelled') {
                 try {
@@ -1076,10 +1100,10 @@ app.options('*', cors());
 const requireAuth = async (req, res, next) => {
   try {
     let userId = null;
-    
+
     // Method 1: Try to get JWT from cookie (for same-domain requests)
     const token = req.cookies?.auth_token;
-    
+
     if (token) {
       try {
         // Verify JWT
@@ -1090,7 +1114,7 @@ const requireAuth = async (req, res, next) => {
           return res.status(500).json({ error: 'Server configuration error' });
         }
         const decoded = jwt.verify(token, jwtSecret);
-        
+
         if (decoded && decoded.userId) {
           userId = decoded.userId;
           req.user = {
@@ -1104,10 +1128,10 @@ const requireAuth = async (req, res, next) => {
         // Token invalid, try alternative auth method
       }
     }
-    
+
     // Method 2: Try to get user ID from header (for cross-domain requests)
     const headerUserId = req.headers['x-user-id'];
-    
+
     if (headerUserId) {
       // Verify user exists in database
       const { data: user, error: userError } = await supabaseAdmin
@@ -1115,7 +1139,7 @@ const requireAuth = async (req, res, next) => {
         .select('id, email, name')
         .eq('id', headerUserId)
         .maybeSingle();
-      
+
       if (!userError && user) {
         req.user = {
           id: user.id,
@@ -1125,12 +1149,12 @@ const requireAuth = async (req, res, next) => {
         return next();
       }
     }
-    
+
     // If both methods failed
     if (!userId && !headerUserId) {
       return res.status(401).json({ error: 'No authentication token provided. Please login again.' });
     }
-    
+
     return res.status(401).json({ error: 'Authentication failed' });
   } catch (error) {
     console.error('Auth middleware error:', error);
@@ -1173,7 +1197,7 @@ app.get('/api/health/whatsapp', requireAuth, async (req, res) => {
   try {
     const clients = waManager.getAllClients();
     const connectedClients = clients.filter(c => c.status === 'connected' || c.status === 'ready');
-    
+
     return res.json({
       status: 'operational',
       message: `WhatsApp service is operational. ${connectedClients.length} active client(s)`,
@@ -1196,7 +1220,7 @@ app.get('/api/health/whatsapp', requireAuth, async (req, res) => {
 app.get('/api/health/ghl', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Check if user has GHL accounts
     const { data: ghlAccounts, error } = await supabaseAdmin
       .from('ghl_accounts')
@@ -1212,10 +1236,10 @@ app.get('/api/health/ghl', requireAuth, async (req, res) => {
     }
 
     const hasValidTokens = ghlAccounts && ghlAccounts.length > 0;
-    
+
     return res.json({
       connected: hasValidTokens,
-      message: hasValidTokens 
+      message: hasValidTokens
         ? `GHL integration is configured. ${ghlAccounts.length} account(s) connected`
         : 'GHL integration not configured. Please connect a GHL account.',
       accountCount: ghlAccounts?.length || 0,
@@ -1233,10 +1257,10 @@ app.get('/api/health/qr', requireAuth, async (req, res) => {
   try {
     // Test QR code generation
     const testQR = 'test-qr-data';
-    
+
     try {
       const qrCode = await qrcode.toDataURL(testQR);
-      
+
       return res.json({
         working: true,
         message: 'QR code generation is working',
@@ -1259,7 +1283,7 @@ app.get('/api/health/qr', requireAuth, async (req, res) => {
 app.get('/api/health/subaccount', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Check user subscription status
     const { data: userInfo, error: userError } = await supabaseAdmin
       .from('users')
@@ -1307,14 +1331,14 @@ app.get('/api/health/email', requireAuth, async (req, res) => {
     const hasResend = !!process.env.RESEND_API_KEY;
     const hasSendGrid = !!process.env.SENDGRID_API_KEY;
     const hasSMTP = !!(process.env.SMTP_HOST || process.env.SMTP_USER);
-    
+
     const configured = hasResend || hasSendGrid || hasSMTP;
-    
+
     let provider = 'Not configured';
     if (hasResend) provider = 'Resend';
     else if (hasSendGrid) provider = 'SendGrid';
     else if (hasSMTP) provider = 'SMTP';
-    
+
     return res.json({
       configured: configured,
       message: configured
@@ -1340,7 +1364,7 @@ app.get('/api/health/webhook', requireAuth, async (req, res) => {
       '/ghl/provider/webhook',
       '/whatsapp/webhook'
     ];
-    
+
     return res.json({
       operational: true,
       message: 'Webhook handlers are operational',
@@ -1367,7 +1391,7 @@ app.get('/whatsapp/webhook', (req, res) => {
 // GHL OAuth Routes
 app.get('/auth/ghl/connect', (req, res) => {
   const { userId } = req.query;
-  
+
   // If userId provided, pass it in state parameter
   let authUrl;
   if (userId) {
@@ -1376,7 +1400,7 @@ app.get('/auth/ghl/connect', (req, res) => {
     // No state parameter - backend will create simple user
     authUrl = `https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}`;
   }
-  
+
   console.log('🔗 GHL OAuth redirect:', { userId, hasState: !!userId });
   res.redirect(authUrl);
 });
@@ -1385,10 +1409,10 @@ app.get('/auth/ghl/connect', (req, res) => {
 app.get('/oauth/callback', async (req, res) => {
   try {
     const { code, state, locationId } = req.query;
-    
+
     console.log('OAuth Callback received - ALL PARAMS:', req.query);
     console.log('Specific params:', { code: !!code, locationId, state });
-    
+
     if (!code) {
       return res.status(400).json({ error: 'Authorization code not provided' });
     }
@@ -1399,9 +1423,9 @@ app.get('/oauth/callback', async (req, res) => {
     // Exchange code for access token
     const tokenResponse = await fetch('https://services.leadconnectorhq.com/oauth/token', {
       method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json'
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
       },
       body: new URLSearchParams({
         client_id: GHL_CLIENT_ID,
@@ -1422,61 +1446,61 @@ app.get('/oauth/callback', async (req, res) => {
         clientId: GHL_CLIENT_ID ? 'SET' : 'MISSING',
         redirectUri: GHL_REDIRECT_URI
       });
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Failed to exchange authorization code for token',
         details: errorText
       });
     }
 
     const tokenData = await tokenResponse.json();
-    console.log('Token data received:', { 
-      userType: tokenData.userType, 
-      companyId: tokenData.companyId, 
+    console.log('Token data received:', {
+      userType: tokenData.userType,
+      companyId: tokenData.companyId,
       locationId: tokenData.locationId,
-      userId: tokenData.userId 
+      userId: tokenData.userId
     });
 
     // Use state as target user ID (passed from frontend)
     // Only logged-in users can add subaccounts
     let targetUserId = null;
-    
+
     if (!state) {
       console.error('❌ State parameter missing - user must be logged in');
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Authentication required. Please login to add GHL accounts.',
         code: 'AUTH_REQUIRED'
       });
     }
-    
+
     try {
       targetUserId = decodeURIComponent(state);
       console.log('Using target user ID from state:', targetUserId);
-      
+
       // Check if user exists (must be existing user from login)
       const { data: existingUser, error: userCheckError } = await supabaseAdmin
         .from('users')
         .select('id, name, email')
         .eq('id', targetUserId)
         .maybeSingle();
-        
+
       if (userCheckError) {
         console.error('Error checking user:', userCheckError);
         return res.status(500).json({ error: 'Database error checking user' });
       }
-      
+
       if (!existingUser) {
         console.error('❌ User not found! Only existing users can connect GHL accounts.');
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'User not found. Please login first.',
           code: 'USER_NOT_FOUND'
         });
       }
-      
+
       console.log('✅ Existing user found:', existingUser);
-      
+
     } catch (e) {
       console.error('Error decoding state:', e);
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Invalid authentication. Please login again.',
         code: 'INVALID_STATE'
       });
@@ -1485,28 +1509,28 @@ app.get('/oauth/callback', async (req, res) => {
     // Store GHL account information - use locationId from token response
     const finalLocationId = tokenData.locationId || locationId;
     console.log('Using location ID:', finalLocationId);
-    
+
     const expiryTimestamp = new Date(Date.now() + (tokenData.expires_in * 1000)).toISOString();
-    
+
     // ===========================================
     // TRIAL SYSTEM CHECKS - Before storing GHL account
     // ===========================================
-    
+
     // 1. Get user subscription info
     const { data: userInfo, error: userInfoError } = await supabaseAdmin
       .from('users')
       .select('subscription_status, max_subaccounts, total_subaccounts, email, trial_ends_at')
       .eq('id', targetUserId)
       .single();
-    
+
     if (userInfoError || !userInfo) {
       console.error('❌ Error fetching user subscription info:', userInfoError);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to check subscription status',
         requiresUpgrade: true
       });
     }
-    
+
     console.log('📊 User subscription info:', {
       status: userInfo.subscription_status,
       current: userInfo.total_subaccounts,
@@ -1519,16 +1543,16 @@ app.get('/oauth/callback', async (req, res) => {
     // NOTE: past_due status does NOT block - existing accounts continue working
     const isOnTrial = userInfo.subscription_status === 'trial' || userInfo.subscription_status === 'free';
     const trialExpired = isOnTrial && userInfo.trial_ends_at && new Date(userInfo.trial_ends_at) <= new Date();
-    
+
     // Check if cancelled subscription has passed subscription_ends_at
-    const subscriptionExpired = userInfo.subscription_status === 'cancelled' && 
-                               userInfo.subscription_ends_at && 
-                               new Date(userInfo.subscription_ends_at) <= new Date();
-    
-    const isExpired = userInfo.subscription_status === 'expired' || 
-                      subscriptionExpired ||
-                      trialExpired;
-    
+    const subscriptionExpired = userInfo.subscription_status === 'cancelled' &&
+      userInfo.subscription_ends_at &&
+      new Date(userInfo.subscription_ends_at) <= new Date();
+
+    const isExpired = userInfo.subscription_status === 'expired' ||
+      subscriptionExpired ||
+      trialExpired;
+
     if (isExpired) {
       console.log('❌ Subscription/trial expired - blocking account addition', {
         status: userInfo.subscription_status,
@@ -1539,7 +1563,7 @@ app.get('/oauth/callback', async (req, res) => {
       const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
       return res.redirect(`${frontendUrl}/dashboard/add-subaccount?error=subscription_expired`);
     }
-    
+
     // For past_due: Allow account creation but redirect to payment page
     if (userInfo.subscription_status === 'past_due') {
       console.log('⚠️ Payment failed (past_due) - redirecting to payment page', {
@@ -1548,18 +1572,18 @@ app.get('/oauth/callback', async (req, res) => {
       const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
       return res.redirect(`${frontendUrl}/dashboard/add-subaccount?error=payment_failed&status=past_due`);
     }
-    
+
     // 2. Check if location already used by another user (anti-abuse)
     const { data: existingLocation } = await supabaseAdmin
       .from('used_locations')
       .select('location_id, email, user_id, is_active')
       .eq('location_id', finalLocationId)
       .maybeSingle();
-    
+
     // If location exists and is linked to different user, block it
     if (existingLocation && existingLocation.user_id !== targetUserId) {
       console.log('⚠️ Location already linked to another user:', existingLocation);
-      
+
       // Log the location conflict event
       await supabaseAdmin.from('subscription_events').insert({
         user_id: targetUserId,
@@ -1571,11 +1595,11 @@ app.get('/oauth/callback', async (req, res) => {
           reason: 'Location already linked to different account'
         }
       });
-      
+
       const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
       return res.redirect(`${frontendUrl}/dashboard?error=location_exists`);
     }
-    
+
     // 3. Check if this location was previously used by this user (even if deleted)
     // ===========================================
     // CHECK LOCATION OWNERSHIP: ghl_accounts FIRST, then used_locations
@@ -1605,66 +1629,66 @@ app.get('/oauth/callback', async (req, res) => {
     }
 
     // Determine if this is a re-add or new location
-    const isActiveInGhlAccounts = existingActiveAccount !== null && 
-                                  existingActiveAccount.user_id === targetUserId;
-    const isPreviouslyOwned = previouslyUsedLocation !== null && 
-                               previouslyUsedLocation.user_id === targetUserId &&
-                               previouslyUsedLocation.location_id === finalLocationId;
-    
+    const isActiveInGhlAccounts = existingActiveAccount !== null &&
+      existingActiveAccount.user_id === targetUserId;
+    const isPreviouslyOwned = previouslyUsedLocation !== null &&
+      previouslyUsedLocation.user_id === targetUserId &&
+      previouslyUsedLocation.location_id === finalLocationId;
+
     console.log(`🔍 Location ownership check:`);
     console.log(`   Location ID: ${finalLocationId}`);
     console.log(`   User ID: ${targetUserId}`);
     console.log(`   Active in ghl_accounts: ${isActiveInGhlAccounts ? 'YES' : 'NO'}`);
     console.log(`   Previously owned (used_locations): ${isPreviouslyOwned ? 'YES' : 'NO'}`);
-    
+
     // If location is active in ghl_accounts, it's already added - handle duplicate check later
     // If location is in used_locations (even if deleted), user can re-add it
     const isReAddingLocation = isPreviouslyOwned;
-    
+
     if (isReAddingLocation) {
       console.log(`✅ Location previously owned by this user - re-adding allowed`);
       console.log(`   User can re-add this location without limit check`);
     } else {
       console.log(`📍 NEW location detected - user never owned this location before`);
       console.log(`   Must pass subaccount limit check`);
-      
+
       // Count current active GHL accounts
       const { data: currentAccounts, error: countError } = await supabaseAdmin
         .from('ghl_accounts')
         .select('id', { count: 'exact' })
         .eq('user_id', targetUserId);
-      
+
       const currentCount = currentAccounts?.length || 0;
-      
+
       // IMPORTANT: Also count total previously owned locations (including deleted ones)
       // This prevents users from deleting and adding NEW locations to bypass limits
       const { data: allOwnedLocations } = await supabaseAdmin
         .from('used_locations')
         .select('location_id')
         .eq('user_id', targetUserId);
-      
+
       const totalOwnedCount = allOwnedLocations?.length || 0;
-      
+
       console.log(`📊 Current active subaccounts: ${currentCount}`);
       console.log(`📊 Total previously owned locations: ${totalOwnedCount}`);
       console.log(`📊 Max allowed: ${userInfo.max_subaccounts}`);
-      
+
       // CRITICAL: If user has EVER owned locations up to the limit, they can only re-add those
       // They CANNOT add NEW locations if they've reached their limit before
       if (totalOwnedCount >= userInfo.max_subaccounts) {
         console.log(`❌ User has already reached their limit (${totalOwnedCount} previously owned locations)`);
         console.log(`🚫 Cannot add NEW location - user must re-add one of their previously owned locations`);
-        
+
         // Get list of previously owned locations that user can re-add
         const { data: previouslyOwnedLocations } = await supabaseAdmin
           .from('used_locations')
           .select('location_id')
           .eq('user_id', targetUserId)
           .order('last_active_at', { ascending: false });
-        
+
         const availableLocations = previouslyOwnedLocations?.map(loc => loc.location_id) || [];
         const availableCount = availableLocations.length;
-        
+
         // Log the limit reached event
         await supabaseAdmin.from('subscription_events').insert({
           user_id: targetUserId,
@@ -1680,9 +1704,9 @@ app.get('/oauth/callback', async (req, res) => {
             available_location_ids: availableLocations
           }
         });
-        
+
         const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
-        
+
         // For past_due: Redirect to payment page instead of blocking
         if (userInfo.subscription_status === 'past_due') {
           return res.redirect(`${frontendUrl}/dashboard/add-subaccount?error=payment_failed&status=past_due`);
@@ -1691,22 +1715,22 @@ app.get('/oauth/callback', async (req, res) => {
           return res.redirect(`${frontendUrl}/dashboard?error=limit_reached&current=${currentCount}&max=${userInfo.max_subaccounts}`);
         }
       }
-      
+
       // Also check current active count (for users who haven't reached their limit yet)
       if (currentCount >= userInfo.max_subaccounts) {
         console.log(`❌ Subaccount limit reached. Current: ${currentCount}, Max: ${userInfo.max_subaccounts}`);
         console.log(`🚫 Cannot add NEW location - user must upgrade or purchase additional subaccount`);
-        
+
         // Get list of previously owned locations that user can re-add (from used_locations)
         const { data: previouslyOwnedLocations } = await supabaseAdmin
           .from('used_locations')
           .select('location_id')
           .eq('user_id', targetUserId)
           .order('last_active_at', { ascending: false });
-        
+
         const availableLocations = previouslyOwnedLocations?.map(loc => loc.location_id) || [];
         const availableCount = availableLocations.length;
-        
+
         // Log the limit reached event
         await supabaseAdmin.from('subscription_events').insert({
           user_id: targetUserId,
@@ -1721,9 +1745,9 @@ app.get('/oauth/callback', async (req, res) => {
             available_location_ids: availableLocations
           }
         });
-        
+
         const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
-        
+
         // For past_due: Redirect to payment page instead of blocking
         if (userInfo.subscription_status === 'past_due') {
           return res.redirect(`${frontendUrl}/dashboard/add-subaccount?error=payment_failed&status=past_due`);
@@ -1732,10 +1756,10 @@ app.get('/oauth/callback', async (req, res) => {
           return res.redirect(`${frontendUrl}/dashboard?error=limit_reached&current=${currentCount}&max=${userInfo.max_subaccounts}`);
         }
       }
-      
+
       console.log('✅ Subaccount limit check passed for new location');
     }
-    
+
     // ===========================================
     // CHECK FOR DUPLICATE SUBACCOUNT (Same Location ID for Same User)
     // ===========================================
@@ -1745,28 +1769,28 @@ app.get('/oauth/callback', async (req, res) => {
       .eq('user_id', targetUserId)
       .eq('location_id', finalLocationId)
       .maybeSingle();
-    
+
     if (duplicateCheckError) {
       console.error('❌ Error checking for duplicate subaccount:', duplicateCheckError);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to check for duplicate account',
         details: duplicateCheckError.message
       });
     }
-    
+
     if (existingGhlAccount) {
       console.log('⚠️ This account is already added for this user:', {
         location_id: finalLocationId,
         existing_account_id: existingGhlAccount.id,
         created_at: existingGhlAccount.created_at
       });
-      
+
       const frontendUrl = process.env.FRONTEND_URL || 'https://octendr.com';
       return res.redirect(`${frontendUrl}/dashboard?error=account_already_added`);
     }
-    
+
     // User already verified above, proceed with GHL account storage
-    
+
     const { error: ghlError } = await supabaseAdmin
       .from('ghl_accounts')
       .insert({
@@ -1786,7 +1810,7 @@ app.get('/oauth/callback', async (req, res) => {
         details: ghlError.details,
         hint: ghlError.hint
       });
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to store account information',
         details: ghlError.message,
         hint: ghlError.hint
@@ -1794,7 +1818,7 @@ app.get('/oauth/callback', async (req, res) => {
     }
 
     console.log('GHL account stored successfully');
-    
+
     // ===========================================
     // SAVE LOCATION TO used_locations (ANTI-ABUSE)
     // ===========================================
@@ -1806,7 +1830,7 @@ app.get('/oauth/callback', async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
-    
+
     if (savedAccount) {
       // Check if location already tracked by THIS user (important for user_id check)
       const { data: existingLocation } = await supabaseAdmin
@@ -1815,7 +1839,7 @@ app.get('/oauth/callback', async (req, res) => {
         .eq('location_id', finalLocationId)
         .eq('user_id', targetUserId)  // CRITICAL: Check user_id to avoid conflicts
         .maybeSingle();
-      
+
       if (!existingLocation) {
         // Save to used_locations for anti-abuse - NEW location being added
         const insertData = {
@@ -1827,11 +1851,11 @@ app.get('/oauth/callback', async (req, res) => {
           last_active_at: new Date().toISOString(),
           is_active: true
         };
-        
+
         const { error: insertError } = await supabaseAdmin
           .from('used_locations')
           .insert(insertData);
-        
+
         if (insertError) {
           console.error('❌ Error saving location to used_locations:', insertError);
         } else {
@@ -1845,13 +1869,13 @@ app.get('/oauth/callback', async (req, res) => {
           ghl_account_id: savedAccount.id,
           is_active: true
         };
-        
+
         const { error: updateError } = await supabaseAdmin
           .from('used_locations')
           .update(updateData)
           .eq('location_id', finalLocationId)
           .eq('user_id', targetUserId);
-        
+
         if (updateError) {
           console.error('❌ Error updating location in used_locations:', updateError);
         } else {
@@ -1860,18 +1884,18 @@ app.get('/oauth/callback', async (req, res) => {
         }
       }
     }
-    
+
     const frontendUrl = process.env.FRONTEND_URL || 'https://whatsappghl.vercel.app';
-    
+
     // Get user data for redirect - ensure we get the correct user
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
       .select('id, name, email')
       .eq('id', targetUserId)
       .single();
-    
+
     console.log('🔍 User data for redirect:', { userData, userError, targetUserId });
-    
+
     if (userData) {
       // Redirect to dashboard with success message
       console.log('✅ Redirecting with user data:', userData);
@@ -1881,7 +1905,7 @@ app.get('/oauth/callback', async (req, res) => {
       // Fallback redirect to dashboard
       res.redirect(`${frontendUrl}/dashboard?success=account_added`);
     }
-    
+
   } catch (error) {
     console.error('OAuth callback error:', error);
     res.status(500).json({ error: 'OAuth callback failed' });
@@ -1892,42 +1916,42 @@ app.get('/oauth/callback', async (req, res) => {
 app.get('/api/user/subscription-info', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Get user subscription info
     const { data: userInfo, error: userError } = await supabaseAdmin
       .from('users')
       .select('subscription_status, max_subaccounts, trial_ends_at')
       .eq('id', userId)
       .single();
-    
+
     if (userError || !userInfo) {
       console.error('Error fetching user info:', userError);
       return res.status(500).json({ error: 'Failed to fetch user info' });
     }
-    
+
     // Get current subaccounts count
     const { data: currentAccounts, error: accountsError } = await supabaseAdmin
       .from('ghl_accounts')
       .select('id', { count: 'exact' })
       .eq('user_id', userId);
-    
+
     const currentCount = currentAccounts?.length || 0;
-    
+
     // Get all active locations from ghl_accounts (to exclude them from available locations)
     const { data: activeAccounts } = await supabaseAdmin
       .from('ghl_accounts')
       .select('location_id')
       .eq('user_id', userId);
-    
+
     const activeLocationIds = (activeAccounts || []).map(acc => acc.location_id);
-    
+
     // Get previously owned locations from used_locations
     const { data: previouslyOwnedLocations, error: locationsError } = await supabaseAdmin
       .from('used_locations')
       .select('location_id, is_active, last_active_at')
       .eq('user_id', userId)
       .order('last_active_at', { ascending: false });
-    
+
     // Filter for inactive locations (not in ghl_accounts and is_active: false)
     const availableLocations = (previouslyOwnedLocations || [])
       .filter(loc => {
@@ -1940,7 +1964,7 @@ app.get('/api/user/subscription-info', requireAuth, async (req, res) => {
         return loc.hasOwnProperty('is_active') ? !loc.is_active : true;
       })
       .map(loc => loc.location_id);
-    
+
     res.json({
       subscription_status: userInfo.subscription_status,
       max_subaccounts: userInfo.max_subaccounts || 0,
@@ -2303,18 +2327,18 @@ app.post('/admin/create-session', requireAuth, async (req, res) => {
       .select('subscription_status, trial_ends_at')
       .eq('id', req.user?.id)
       .single();
-    
+
     if (userInfo) {
       // IMPORTANT: Only check trial expiry if user is on trial/free plan
       // Active subscriptions (starter/professional) should NOT be blocked by trial_ends_at
       const isOnTrial = userInfo.subscription_status === 'trial' || userInfo.subscription_status === 'free';
       const trialExpired = isOnTrial && userInfo.trial_ends_at && new Date(userInfo.trial_ends_at) <= new Date();
-      const isExpired = userInfo.subscription_status === 'expired' || 
-                        userInfo.subscription_status === 'cancelled' || 
-                        trialExpired;
-      
+      const isExpired = userInfo.subscription_status === 'expired' ||
+        userInfo.subscription_status === 'cancelled' ||
+        trialExpired;
+
       if (isExpired) {
-        return res.status(403).json({ 
+        return res.status(403).json({
           error: 'Subscription expired. Please upgrade to continue using WhatsApp Integration.',
           code: 'SUBSCRIPTION_EXPIRED'
         });
@@ -2326,7 +2350,7 @@ app.post('/admin/create-session', requireAuth, async (req, res) => {
   }
   try {
     const { subaccountId, mode = 'qr' } = req.body;
-    
+
     if (!subaccountId) {
       return res.status(400).json({ error: 'Subaccount ID is required' });
     }
@@ -2355,21 +2379,21 @@ app.post('/admin/create-session', requireAuth, async (req, res) => {
     console.log(`✅ Session created with ID: ${session.id}, mode: ${mode}`);
 
     // Start WhatsApp client creation for QR mode
-      const sessionName = `subaccount_${subaccountId}_${session.id}`;
-      
-      try {
-        await waManager.createClient(sessionName);
-        console.log(`📱 QR session client created: ${sessionName}`);
-      } catch (error) {
-        console.error('❌ Error creating QR client:', error);
-        // Update session status to error
-        await supabaseAdmin
-          .from('sessions')
-          .update({ status: 'disconnected' })
-          .eq('id', session.id);
+    const sessionName = `subaccount_${subaccountId}_${session.id}`;
+
+    try {
+      await waManager.createClient(sessionName);
+      console.log(`📱 QR session client created: ${sessionName}`);
+    } catch (error) {
+      console.error('❌ Error creating QR client:', error);
+      // Update session status to error
+      await supabaseAdmin
+        .from('sessions')
+        .update({ status: 'disconnected' })
+        .eq('id', session.id);
     }
 
-    res.json({ 
+    res.json({
       success: true,
       sessionId: session.id,
       mode: mode,
@@ -2385,7 +2409,7 @@ app.post('/admin/create-session', requireAuth, async (req, res) => {
 app.get('/admin/session/:sessionId', requireAuth, async (req, res) => {
   try {
     const { sessionId } = req.params;
-    
+
     const { data: session, error } = await supabaseAdmin
       .from('sessions')
       .select('*')
@@ -2397,7 +2421,7 @@ app.get('/admin/session/:sessionId', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    res.json({ 
+    res.json({
       session: {
         id: session.id,
         status: session.status,
@@ -2421,7 +2445,7 @@ app.get('/admin/session/:sessionId', requireAuth, async (req, res) => {
 app.get('/admin/subaccount/:ghlAccountId/settings', requireAuth, async (req, res) => {
   try {
     const { ghlAccountId } = req.params;
-    
+
     // Verify ownership
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
@@ -2429,11 +2453,11 @@ app.get('/admin/subaccount/:ghlAccountId/settings', requireAuth, async (req, res
       .eq('id', ghlAccountId)
       .eq('user_id', req.user.id)
       .maybeSingle();
-    
+
     if (!ghlAccount) {
       return res.status(404).json({ error: 'Subaccount not found' });
     }
-    
+
     const settings = await subaccountHelpers.getSettings(ghlAccountId);
     res.json({ settings });
   } catch (error) {
@@ -2447,7 +2471,7 @@ app.put('/admin/subaccount/:ghlAccountId/settings', requireAuth, async (req, res
   try {
     const { ghlAccountId } = req.params;
     const { create_contact_in_ghl, drip_mode_enabled, drip_messages_per_batch, drip_delay_minutes } = req.body;
-    
+
     // Verify ownership
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
@@ -2455,11 +2479,11 @@ app.put('/admin/subaccount/:ghlAccountId/settings', requireAuth, async (req, res
       .eq('id', ghlAccountId)
       .eq('user_id', req.user.id)
       .maybeSingle();
-    
+
     if (!ghlAccount) {
       return res.status(404).json({ error: 'Subaccount not found' });
     }
-    
+
     // Validate inputs
     const updateData = {};
     if (typeof create_contact_in_ghl === 'boolean') {
@@ -2474,7 +2498,7 @@ app.put('/admin/subaccount/:ghlAccountId/settings', requireAuth, async (req, res
     if (typeof drip_delay_minutes === 'number' && drip_delay_minutes >= 0) {
       updateData.drip_delay_minutes = drip_delay_minutes;
     }
-    
+
     const updated = await subaccountHelpers.updateSettings(ghlAccountId, req.user.id, updateData);
     res.json({ settings: updated });
   } catch (error) {
@@ -2487,7 +2511,7 @@ app.put('/admin/subaccount/:ghlAccountId/settings', requireAuth, async (req, res
 app.get('/admin/subaccount/:ghlAccountId/analytics', requireAuth, async (req, res) => {
   try {
     const { ghlAccountId } = req.params;
-    
+
     // Verify ownership
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
@@ -2495,11 +2519,11 @@ app.get('/admin/subaccount/:ghlAccountId/analytics', requireAuth, async (req, re
       .eq('id', ghlAccountId)
       .eq('user_id', req.user.id)
       .maybeSingle();
-    
+
     if (!ghlAccount) {
       return res.status(404).json({ error: 'Subaccount not found' });
     }
-    
+
     const analytics = await subaccountHelpers.getAnalytics(ghlAccountId);
     res.json({ analytics });
   } catch (error) {
@@ -2512,7 +2536,7 @@ app.get('/admin/subaccount/:ghlAccountId/analytics', requireAuth, async (req, re
 app.get('/admin/subaccount/:ghlAccountId/sessions', requireAuth, async (req, res) => {
   try {
     const { ghlAccountId } = req.params;
-    
+
     // Verify ownership
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
@@ -2520,21 +2544,21 @@ app.get('/admin/subaccount/:ghlAccountId/sessions', requireAuth, async (req, res
       .eq('id', ghlAccountId)
       .eq('user_id', req.user.id)
       .maybeSingle();
-    
+
     if (!ghlAccount) {
       return res.status(404).json({ error: 'Subaccount not found' });
     }
-    
+
     const { data: sessions, error } = await supabaseAdmin
       .from('sessions')
       .select('*')
       .eq('subaccount_id', ghlAccountId)
       .order('created_at', { ascending: false });
-    
+
     if (error) {
       throw error;
     }
-    
+
     res.json({ sessions: sessions || [] });
   } catch (error) {
     console.error('Error fetching sessions:', error);
@@ -2546,7 +2570,7 @@ app.get('/admin/subaccount/:ghlAccountId/sessions', requireAuth, async (req, res
 app.post('/admin/subaccount/:ghlAccountId/sessions/:sessionId/activate', requireAuth, async (req, res) => {
   try {
     const { ghlAccountId, sessionId } = req.params;
-    
+
     // Verify ownership
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
@@ -2554,11 +2578,11 @@ app.post('/admin/subaccount/:ghlAccountId/sessions/:sessionId/activate', require
       .eq('id', ghlAccountId)
       .eq('user_id', req.user.id)
       .maybeSingle();
-    
+
     if (!ghlAccount) {
       return res.status(404).json({ error: 'Subaccount not found' });
     }
-    
+
     // Verify session belongs to this subaccount
     const { data: session } = await supabaseAdmin
       .from('sessions')
@@ -2566,14 +2590,14 @@ app.post('/admin/subaccount/:ghlAccountId/sessions/:sessionId/activate', require
       .eq('id', sessionId)
       .eq('subaccount_id', ghlAccountId)
       .maybeSingle();
-    
+
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
     }
-    
+
     // Set as active (deactivates others)
     await subaccountHelpers.setActiveSession(sessionId, ghlAccountId);
-    
+
     res.json({ success: true, message: 'Session activated' });
   } catch (error) {
     console.error('Error activating session:', error);
@@ -2585,7 +2609,7 @@ app.post('/admin/subaccount/:ghlAccountId/sessions/:sessionId/activate', require
 app.get('/admin/subaccount/:ghlAccountId/drip-queue', requireAuth, async (req, res) => {
   try {
     const { ghlAccountId } = req.params;
-    
+
     // Verify ownership
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
@@ -2593,22 +2617,22 @@ app.get('/admin/subaccount/:ghlAccountId/drip-queue', requireAuth, async (req, r
       .eq('id', ghlAccountId)
       .eq('user_id', req.user.id)
       .maybeSingle();
-    
+
     if (!ghlAccount) {
       return res.status(404).json({ error: 'Subaccount not found' });
     }
-    
+
     const { data: queue, error } = await supabaseAdmin
       .from('drip_queue')
       .select('*')
       .eq('ghl_account_id', ghlAccountId)
       .order('created_at', { ascending: false })
       .limit(100);
-    
+
     if (error) {
       throw error;
     }
-    
+
     // Count by status
     const stats = {
       pending: queue.filter(q => q.status === 'pending').length,
@@ -2616,7 +2640,7 @@ app.get('/admin/subaccount/:ghlAccountId/drip-queue', requireAuth, async (req, r
       sent: queue.filter(q => q.status === 'sent').length,
       failed: queue.filter(q => q.status === 'failed').length
     };
-    
+
     res.json({ queue: queue || [], stats });
   } catch (error) {
     console.error('Error fetching drip queue:', error);
@@ -2638,10 +2662,10 @@ app.post('/admin/ghl/connect-subaccount', requireAuth, async (req, res) => {
     // Generate GHL OAuth URL for this specific location
     const authUrl = `https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}&state=${encodeURIComponent(req.user.id)}`;
 
-    return res.json({ 
-      success: false, 
+    return res.json({
+      success: false,
       message: 'Please use GHL OAuth flow to connect subaccounts',
-      authUrl: authUrl 
+      authUrl: authUrl
     });
   } catch (error) {
     console.error('Error connecting subaccount:', error);
@@ -2683,7 +2707,7 @@ app.get('/ghl/provider/config', (req, res) => {
 async function downloadGHLMedia(mediaUrl, accessToken) {
   try {
     console.log(`📥 Downloading media from GHL: ${mediaUrl}`);
-    
+
     // Use proper GHL headers with Version (required for GHL API)
     const response = await axios.get(mediaUrl, {
       responseType: 'arraybuffer',
@@ -2696,19 +2720,19 @@ async function downloadGHLMedia(mediaUrl, accessToken) {
       },
       timeout: 60000 // 60 second timeout for large files
     });
-    
+
     console.log(`✅ Downloaded ${response.data.byteLength} bytes from GHL`);
     return Buffer.from(response.data);
-    
+
   } catch (error) {
     console.error('❌ Failed to download GHL media:', error.message);
     console.error('   Status:', error.response?.status);
     console.error('   URL:', mediaUrl);
-    
+
     if (error.response?.status === 401) {
       console.error('   ⚠️ GHL media URL requires authorization - token may be invalid or URL expired');
     }
-    
+
     throw new Error(`GHL media download failed: ${error.message}`);
   }
 }
@@ -2722,29 +2746,29 @@ async function downloadGHLMedia(mediaUrl, accessToken) {
 function detectMediaType(url, contentType) {
   const lowerUrl = url.toLowerCase();
   const lowerContentType = (contentType || '').toLowerCase();
-  
+
   // Check content type first
   if (lowerContentType.includes('image/')) return 'image';
   if (lowerContentType.includes('video/')) return 'video';
   if (lowerContentType.includes('audio/')) return 'audio';
   if (lowerContentType.includes('application/') || lowerContentType.includes('document/')) return 'document';
-  
+
   // Check URL extension
-  if (lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || 
-      lowerUrl.includes('.gif') || lowerUrl.includes('.webp') || lowerUrl.includes('.bmp')) {
+  if (lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') ||
+    lowerUrl.includes('.gif') || lowerUrl.includes('.webp') || lowerUrl.includes('.bmp')) {
     return 'image';
   }
-  
-  if (lowerUrl.includes('.mp4') || lowerUrl.includes('.avi') || lowerUrl.includes('.mov') || 
-      lowerUrl.includes('.mkv') || lowerUrl.includes('.webm')) {
+
+  if (lowerUrl.includes('.mp4') || lowerUrl.includes('.avi') || lowerUrl.includes('.mov') ||
+    lowerUrl.includes('.mkv') || lowerUrl.includes('.webm')) {
     return 'video';
   }
-  
-  if (lowerUrl.includes('.mp3') || lowerUrl.includes('.ogg') || lowerUrl.includes('.wav') || 
-      lowerUrl.includes('.m4a') || lowerUrl.includes('.aac')) {
+
+  if (lowerUrl.includes('.mp3') || lowerUrl.includes('.ogg') || lowerUrl.includes('.wav') ||
+    lowerUrl.includes('.m4a') || lowerUrl.includes('.aac')) {
     return 'audio';
   }
-  
+
   // Default to document for everything else (PDF, DOC, etc.)
   return 'document';
 }
@@ -2759,25 +2783,25 @@ app.post('/ghl/provider/webhook', async (req, res) => {
       messageId: req.body.messageId,
       timestamp: new Date().toISOString()
     });
-    
+
     // Skip InboundMessage - this is echo of messages we sent to GHL
     if (req.body.type === 'InboundMessage') {
       console.log('⏭️ Skipping InboundMessage (echo)');
       return res.json({ status: 'skipped', reason: 'inbound_message_echo' });
     }
-    
+
     // Skip SMS type - duplicate of OutboundMessage
     if (req.body.type === 'SMS') {
       console.log('⏭️ Skipping SMS type (duplicate)');
       return res.json({ status: 'skipped', reason: 'sms_type_duplicate' });
     }
-    
+
     // Skip other non-message types (silent skip)
     if (req.body.type !== 'OutboundMessage') {
       console.log(`⏭️ Skipping webhook type: ${req.body.type}`);
       return res.json({ status: 'skipped', reason: `unsupported_type_${req.body.type}` });
     }
-    
+
     console.log('✅ Processing OutboundMessage webhook');
 
     const locationId = req.body.locationId;
@@ -2807,14 +2831,14 @@ app.post('/ghl/provider/webhook', async (req, res) => {
     }
 
     console.log('📋 Webhook Debug - Full request body:', JSON.stringify(req.body, null, 2));
-    
+
     // Process OutboundMessage - actual messages from GHL
     // GHL OutboundMessage may have phone in different fields, check all possibilities
     const { message, contactId, phone, attachments = [], body, messageId, conversationId } = req.body;
-    
+
     // Use 'body' field if 'message' is not available (GHL uses 'body' for OutboundMessage)
     const messageText = message || body || '';
-    
+
     console.log('📋 Webhook Debug - Extracted fields:', {
       locationId,
       contactId,
@@ -2824,10 +2848,10 @@ app.post('/ghl/provider/webhook', async (req, res) => {
       messageText: messageText.substring(0, 50),
       hasAttachments: attachments && attachments.length > 0
     });
-    
+
     // Prevent duplicate processing using messageId
     if (messageId) {
-    if (!global.messageCache) {
+      if (!global.messageCache) {
         global.messageCache = new Map();
       }
       if (global.messageCache.has(messageId)) {
@@ -2846,25 +2870,25 @@ app.post('/ghl/provider/webhook', async (req, res) => {
         contactId
       });
     }
-    
+
     if (!locationId) {
       return res.json({ status: 'success' });
     }
-    
+
     // Allow empty message for attachment-only messages
     if (!messageText && (!attachments || attachments.length === 0)) {
       return res.json({ status: 'success' });
     }
-    
+
     // Ignore messages that contain media URLs (echo prevention)
     if (messageText && (
-      messageText.includes('storage.googleapis.com/msgsndr') || 
+      messageText.includes('storage.googleapis.com/msgsndr') ||
       messageText.startsWith('https://storage.googleapis.com') ||
       (messageText.startsWith('https://') && messageText.includes('msgsndr'))
     )) {
       return res.json({ status: 'success', reason: 'media_url_echo' });
     }
-    
+
     // Get GHL account
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
@@ -2887,7 +2911,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
 
     // Get subaccount settings
     const settings = await subaccountHelpers.getSettings(ghlAccount.id);
-    
+
     // Check if drip mode is enabled
     if (settings.drip_mode_enabled) {
       // Add to drip queue instead of sending immediately
@@ -2906,10 +2930,10 @@ app.post('/ghl/provider/webhook', async (req, res) => {
         // Fall through to send immediately if queue fails
       }
     }
-    
+
     // Get active WhatsApp session (multi-number support)
     let session = await subaccountHelpers.getActiveSession(ghlAccount.id);
-    
+
     // Fallback to old method if no active session found
     if (!session) {
       const { data: fallbackSession } = await supabaseAdmin
@@ -2920,45 +2944,45 @@ app.post('/ghl/provider/webhook', async (req, res) => {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      
+
       if (!fallbackSession) {
         return res.json({ status: 'error', message: 'No active WhatsApp session found' });
       }
-      
+
       // Use fallback session
       session = fallbackSession;
     }
-    
+
     // Get WhatsApp client using Baileys
     const cleanSubaccountId = session.subaccount_id.replace(/[^a-zA-Z0-9_-]/g, '_');
     const clientKey = `location_${cleanSubaccountId}_${session.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    
+
     console.log(`🔍 Webhook Debug - Session ID: ${session.id}`);
     console.log(`🔍 Webhook Debug - Subaccount ID: ${session.subaccount_id}`);
     console.log(`🔍 Webhook Debug - Client Key: ${clientKey}`);
     console.log(`🔍 Webhook Debug - Session Status: ${session.status}`);
-    
+
     const clientStatus = waManager.getClientStatus(clientKey);
     console.log(`🔍 Webhook Debug - Client Status:`, clientStatus);
-    
+
     // Try to get all available clients to see what's available
     const allClients = waManager.getAllClients();
     console.log(`🔍 Webhook Debug - Available Clients:`, allClients.map(c => ({ sessionId: c.sessionId, status: c.status })));
-    
+
     if (!clientStatus || (clientStatus.status !== 'connected' && clientStatus.status !== 'ready')) {
       console.error(`❌ WhatsApp client not ready for webhook - Key: ${clientKey}, Status: ${clientStatus?.status || 'not found'}`);
-      return res.json({ 
-        status: 'error', 
+      return res.json({
+        status: 'error',
         message: 'WhatsApp client not connected',
         clientKey: clientKey,
         clientStatus: clientStatus?.status || 'not found',
         availableClients: allClients.map(c => c.sessionId)
       });
     }
-    
+
     // Get phone number from webhook data or fetch from contactId
     let phoneNumber = req.body.phone || req.body.contactPhone || req.body.recipientPhone;
-    
+
     // If phone is not in webhook, fetch from contactId
     if (!phoneNumber && contactId) {
       console.log(`🔍 Phone not in webhook, fetching from contactId: ${contactId}`);
@@ -2971,7 +2995,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
             "Content-Type": "application/json"
           }
         }, ghlAccount);
-        
+
         if (contactRes.ok) {
           const contactData = await contactRes.json();
           phoneNumber = contactData.contact?.phone || contactData.phone;
@@ -2983,7 +3007,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
         } else {
           const errorText = await contactRes.text();
           console.error(`❌ Failed to fetch contact ${contactId}:`, errorText);
-          
+
           // Try fetching from conversation if contactId fails
           if (conversationId) {
             console.log(`🔍 Trying to fetch contact from conversation: ${conversationId}`);
@@ -2996,7 +3020,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                   "Content-Type": "application/json"
                 }
               }, ghlAccount);
-              
+
               if (convRes.ok) {
                 const convData = await convRes.json();
                 phoneNumber = convData.conversation?.contact?.phone || convData.contact?.phone || convData.phone;
@@ -3013,34 +3037,34 @@ app.post('/ghl/provider/webhook', async (req, res) => {
         console.error(`❌ Error fetching contact:`, contactError.message);
       }
     }
-    
+
     if (!phoneNumber) {
       console.error(`❌ No phone number available - phone: ${req.body.phone}, contactId: ${contactId}, conversationId: ${conversationId}`);
       console.error(`❌ Webhook body keys:`, Object.keys(req.body));
       return res.json({ status: 'error', message: 'No phone number available', body: req.body });
     }
-    
+
     // Ensure phone number is in E.164 format (with +)
     if (phoneNumber && !phoneNumber.startsWith('+')) {
       phoneNumber = '+' + phoneNumber.replace(/^\+/, '');
     }
-    
+
     console.log(`📱 Sending message to phone: ${phoneNumber} (from GHL webhook)`);
     console.log(`📱 Webhook Debug - Message Text: "${messageText}"`);
     console.log(`📱 Webhook Debug - Message ID: ${messageId}`);
     console.log(`📱 Webhook Debug - Client Key: ${clientKey}`);
-    
+
     // Check if this message was just received from WhatsApp (prevent echo)
     const recentMessageKey = `whatsapp_${phoneNumber}_${messageText}`;
     if (global.recentMessages && global.recentMessages.has(recentMessageKey)) {
       return res.json({ status: 'success', reason: 'echo_prevented' });
     }
-    
+
     // Simple echo prevention
     const messageContent = messageText.toLowerCase().trim();
     const recentMessages = global.recentMessages || new Set();
     let isRecentEcho = false;
-    
+
     for (const key of recentMessages) {
       if (key.startsWith(`whatsapp_${phoneNumber}_`)) {
         const recentContent = key.split('_').slice(2).join('_').toLowerCase().trim();
@@ -3050,11 +3074,11 @@ app.post('/ghl/provider/webhook', async (req, res) => {
         }
       }
     }
-    
+
     if (isRecentEcho) {
       return res.json({ status: 'success', reason: 'echo_prevented' });
     }
-    
+
     // Process and send message (text and/or media)
     try {
       // Check if we have attachments to send
@@ -3063,7 +3087,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
         if (!validToken) {
           validToken = await ensureValidToken(ghlAccount);
         }
-        
+
         // Process each attachment
         for (let i = 0; i < attachments.length; i++) {
           const attachmentUrl = attachments[i];
@@ -3071,14 +3095,14 @@ app.post('/ghl/provider/webhook', async (req, res) => {
             let mediaType = detectMediaType(attachmentUrl);
             let mediaPayload = null;
             let fileName = null;
-            
+
             try {
               const mediaBuffer = await downloadGHLMedia(attachmentUrl, validToken);
               mediaPayload = mediaBuffer;
             } catch (downloadError) {
               mediaPayload = attachmentUrl; // Fallback to URL
             }
-            
+
             if (mediaType === 'document' || mediaType === 'audio') {
               const urlParts = attachmentUrl.split('/');
               const lastPart = urlParts[urlParts.length - 1];
@@ -3086,22 +3110,22 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                 fileName = lastPart.split('?')[0];
               }
             }
-            
+
             const caption = (i === 0 && messageText) ? messageText : '';
-            
+
             const attachResult = await waManager.sendMessage(
-              clientKey, 
-              phoneNumber, 
-              caption, 
-              mediaType, 
+              clientKey,
+              phoneNumber,
+              caption,
+              mediaType,
               mediaPayload,
               fileName
             );
-            
+
             // Check if attachment send was skipped/failed
             if (attachResult && attachResult.status === 'skipped') {
               console.error(`❌ Attachment skipped: ${attachResult.reason}`);
-              
+
               // Send error message to GHL conversation
               try {
                 if (contactId) {
@@ -3111,7 +3135,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                   } else {
                     errorMessage = `⚠️ Attachment delivery failed\n\nReason: ${attachResult.reason || 'Unknown error'}\n\nPhone: ${phoneNumber}`;
                   }
-                  
+
                   const errorPayload = {
                     type: "SMS",
                     conversationProviderId: ghlAccount.conversation_provider_id || getProviderId(),
@@ -3121,7 +3145,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                     status: "delivered",
                     altId: `error_${Date.now()}`
                   };
-                  
+
                   const errorRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
                     method: 'POST',
                     headers: {
@@ -3131,7 +3155,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                     },
                     body: JSON.stringify(errorPayload)
                   }, ghlAccount);
-                  
+
                   if (errorRes.ok) {
                     console.log(`✅ Error message sent to GHL conversation for attachment failure`);
                   }
@@ -3140,15 +3164,15 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                 console.error(`❌ Error sending error message to GHL:`, errorMsgError.message);
               }
             }
-            
+
           } catch (attachError) {
             console.error(`❌ Error sending attachment ${i + 1}:`, attachError.message);
-            
+
             // Send error message to GHL conversation on exception
             try {
               if (contactId) {
                 const errorMessage = `⚠️ Attachment delivery failed\n\nError: ${attachError.message || 'Unknown error'}\n\nPhone: ${phoneNumber}`;
-                
+
                 const errorPayload = {
                   type: "SMS",
                   conversationProviderId: ghlAccount.conversation_provider_id || getProviderId(),
@@ -3158,7 +3182,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                   status: "delivered",
                   altId: `error_${Date.now()}`
                 };
-                
+
                 const errorRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
                   method: 'POST',
                   headers: {
@@ -3168,7 +3192,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                   },
                   body: JSON.stringify(errorPayload)
                 }, ghlAccount);
-                
+
                 if (errorRes.ok) {
                   console.log(`✅ Error message sent to GHL conversation`);
                 }
@@ -3178,12 +3202,12 @@ app.post('/ghl/provider/webhook', async (req, res) => {
             }
           }
         }
-        
+
         if (!messageText) {
           return res.json({ status: 'success' });
         }
       }
-      
+
       // Send text message if there's text and no attachments
       if (messageText && (!attachments || attachments.length === 0)) {
         console.log(`📤 Sending text message: ${messageText}`);
@@ -3191,14 +3215,14 @@ app.post('/ghl/provider/webhook', async (req, res) => {
         console.log(`   - clientKey: ${clientKey}`);
         console.log(`   - phoneNumber: ${phoneNumber}`);
         console.log(`   - message: ${messageText}`);
-        
+
         try {
           const sendResult = await waManager.sendMessage(clientKey, phoneNumber, messageText || '', 'text');
           console.log(`📤 Webhook Debug - Send Result:`, sendResult);
-          
-      if (sendResult && sendResult.status === 'skipped') {
+
+          if (sendResult && sendResult.status === 'skipped') {
             console.error(`❌ Message skipped: ${sendResult.reason}`);
-            
+
             // Send error message to GHL conversation when message fails
             try {
               let errorMessage = '';
@@ -3207,7 +3231,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
               } else {
                 errorMessage = `⚠️ Message delivery failed\n\nReason: ${sendResult.reason || 'Unknown error'}\n\nPhone: ${phoneNumber}`;
               }
-              
+
               // Use conversationId from webhook if available, otherwise find from contactId
               let targetConversationId = conversationId;
               if (!targetConversationId && contactId) {
@@ -3220,7 +3244,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                       "Content-Type": "application/json"
                     }
                   }, ghlAccount);
-                  
+
                   if (convRes.ok) {
                     const convData = await convRes.json();
                     if (convData.conversations && convData.conversations.length > 0) {
@@ -3231,29 +3255,29 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                   console.error(`❌ Error finding conversation:`, convError.message);
                 }
               }
-              
+
               // Send error message to GHL conversation
               if (contactId) {
                 const errorPayload = {
                   type: "SMS",
                   conversationProviderId: ghlAccount.conversation_provider_id || getProviderId(),
-            contactId: contactId,
+                  contactId: contactId,
                   message: errorMessage,
-            direction: "inbound",
-            status: "delivered",
+                  direction: "inbound",
+                  status: "delivered",
                   altId: `error_${Date.now()}`
-          };
-          
+                };
+
                 const errorRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${validToken}`,
-              Version: "2021-07-28",
-              "Content-Type": "application/json"
-            },
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${validToken}`,
+                    Version: "2021-07-28",
+                    "Content-Type": "application/json"
+                  },
                   body: JSON.stringify(errorPayload)
-          }, ghlAccount);
-          
+                }, ghlAccount);
+
                 if (errorRes.ok) {
                   console.log(`✅ Error message sent to GHL conversation for contact: ${contactId}`);
                 } else {
@@ -3263,69 +3287,69 @@ app.post('/ghl/provider/webhook', async (req, res) => {
               }
             } catch (errorMsgError) {
               console.error(`❌ Error sending error message to GHL:`, errorMsgError.message);
-        }
-        
-        return res.json({ 
-          status: 'warning', 
-          reason: sendResult.reason,
-          phoneNumber: phoneNumber,
+            }
+
+            return res.json({
+              status: 'warning',
+              reason: sendResult.reason,
+              phoneNumber: phoneNumber,
               sendResult: sendResult
-        });
-      }
-      
-      console.log('✅ Message sent successfully via Baileys');
+            });
+          }
+
+          console.log('✅ Message sent successfully via Baileys');
           console.log('✅ Webhook Debug - Message delivery confirmed');
-          
+
           // Track analytics for sent message
           await subaccountHelpers.incrementAnalytics(ghlAccount.id, ghlAccount.user_id, 'sent');
-    } catch (sendError) {
+        } catch (sendError) {
           console.error(`❌ Error in waManager.sendMessage:`, sendError);
           console.error(`❌ Error stack:`, sendError.stack);
-      
+
           // Send error message to GHL conversation on exception
-      try {
+          try {
             if (contactId) {
               const errorMessage = `⚠️ Message delivery failed\n\nError: ${sendError.message || 'Unknown error'}\n\nPhone: ${phoneNumber}`;
-              
-        const errorPayload = {
+
+              const errorPayload = {
                 type: "SMS",
                 conversationProviderId: ghlAccount.conversation_provider_id || getProviderId(),
-          contactId: contactId,
+                contactId: contactId,
                 message: errorMessage,
-          direction: "inbound",
-          status: "delivered",
-          altId: `error_${Date.now()}`
-        };
-        
-        const errorRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${validToken}`,
-            Version: "2021-07-28",
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(errorPayload)
-        }, ghlAccount);
-        
-        if (errorRes.ok) {
+                direction: "inbound",
+                status: "delivered",
+                altId: `error_${Date.now()}`
+              };
+
+              const errorRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${validToken}`,
+                  Version: "2021-07-28",
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify(errorPayload)
+              }, ghlAccount);
+
+              if (errorRes.ok) {
                 console.log(`✅ Error message sent to GHL conversation`);
-        }
+              }
             }
           } catch (errorMsgError) {
             console.error(`❌ Error sending error message to GHL:`, errorMsgError.message);
-      }
-      
+          }
+
           throw sendError;
         }
       }
     } catch (sendError) {
       console.error('❌ Error sending message via Baileys:', sendError.message);
-      return res.json({ 
-        status: 'error', 
+      return res.json({
+        status: 'error',
         error: sendError.message
       });
     }
-    
+
     res.json({ status: 'success' });
   } catch (error) {
     console.error('Webhook processing error:', error);
@@ -3350,7 +3374,7 @@ function validateEnvironment() {
     console.log('⚠️ GHL_PROVIDER_ID not set - will use fallback provider ID');
     return false;
   }
-  
+
   console.log('✅ GHL_PROVIDER_ID found');
   return true;
 }
@@ -3364,20 +3388,20 @@ function getProviderId() {
 app.post('/whatsapp/webhook', async (req, res) => {
   try {
     const { from, message, messageType = 'text', mediaUrl, mediaMessage, timestamp: messageTimestamp, sessionId, whatsappMsgId } = req.body;
-    
+
     if (!from) {
       return res.json({ status: 'success' });
     }
-    
+
     // Allow empty message for media messages
     if (!message && !mediaUrl && !mediaMessage) {
       return res.json({ status: 'success' });
     }
-    
+
     // Deterministic mapping: phone → locationId → providerId → location_api_key
     const waNumber = from.replace('@s.whatsapp.net', '');
     const phone = "+" + waNumber; // E.164 format
-    
+
     // Get GHL account from session or use first available
     let ghlAccount = null;
     if (sessionId) {
@@ -3386,30 +3410,30 @@ app.post('/whatsapp/webhook', async (req, res) => {
         .select('*, ghl_accounts(*)')
         .eq('id', sessionId)
         .maybeSingle();
-      
+
       if (session && session.ghl_accounts) {
         ghlAccount = session.ghl_accounts;
       }
     }
-    
+
     // Fallback: Try to find GHL account by session ID pattern
     if (!ghlAccount && sessionId) {
       const sessionParts = sessionId.split('_');
       if (sessionParts.length >= 2) {
         const subaccountId = sessionParts[1];
-        
+
         const { data: accountBySubaccount } = await supabaseAdmin
           .from('ghl_accounts')
           .select('*')
           .eq('id', subaccountId)
           .maybeSingle();
-        
+
         if (accountBySubaccount) {
           ghlAccount = accountBySubaccount;
         }
       }
     }
-    
+
     // Final fallback to any GHL account if still not found
     if (!ghlAccount) {
       const { data: anyAccount } = await supabaseAdmin
@@ -3417,18 +3441,18 @@ app.post('/whatsapp/webhook', async (req, res) => {
         .select('*')
         .limit(1)
         .maybeSingle();
-      
+
       if (anyAccount) {
         ghlAccount = anyAccount;
       }
     }
-    
+
     if (!ghlAccount) {
       return res.json({ status: 'success' });
     }
-    
+
     const locationId = ghlAccount.location_id;
-    
+
     // Use account's conversation provider ID (more reliable)
     let providerId = ghlAccount.conversation_provider_id;
     if (!providerId) {
@@ -3437,18 +3461,18 @@ app.post('/whatsapp/webhook', async (req, res) => {
         return res.json({ status: 'error', message: 'Provider ID not available' });
       }
     }
-    
+
     console.log(`📱 Processing WhatsApp message from: ${phone} for location: ${locationId}`);
-    
+
     // Get valid token for this GHL account
     const validToken = await ensureValidToken(ghlAccount);
-    
+
     // Check subaccount settings for contact creation toggle
     const settings = await subaccountHelpers.getSettings(ghlAccount.id);
-    
+
     // Upsert contact (same location) - only if setting allows
     let contactId = null;
-    
+
     if (settings.create_contact_in_ghl) {
       // Setting is ON - create/upsert contact
       try {
@@ -3465,13 +3489,13 @@ app.post('/whatsapp/webhook', async (req, res) => {
             locationId: locationId
           })
         }, ghlAccount);
-        
+
         if (contactRes.ok) {
           const contactData = await contactRes.json();
           contactId = contactData.contact?.id;
         } else {
           const errorText = await contactRes.text();
-          
+
           // Try to extract contactId from error if it's a duplicate contact error
           try {
             const errorJson = JSON.parse(errorText);
@@ -3498,20 +3522,20 @@ app.post('/whatsapp/webhook', async (req, res) => {
             "Content-Type": "application/json"
           }
         }, ghlAccount);
-        
+
         if (listRes.ok) {
           const listData = await listRes.json();
           console.log(`🔍 Contact search result for ${phone}:`, listData);
-          
+
           // Check if any contacts returned
           if (listData.contacts && listData.contacts.length > 0) {
             // Find contact with matching phone
-            const matchingContact = listData.contacts.find(c => 
-              c.phone === phone || 
+            const matchingContact = listData.contacts.find(c =>
+              c.phone === phone ||
               c.phone === phone.replace('+', '') ||
               c.phone === waNumber
             );
-            
+
             if (matchingContact) {
               contactId = matchingContact.id;
               console.log(`✅ Found existing contact: ${contactId} for phone ${phone}`);
@@ -3530,7 +3554,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
         // Silent fail - if search fails, assume contact doesn't exist
       }
     }
-    
+
     // If no contactId found and setting is OFF, don't sync message
     if (!contactId) {
       console.log(`⏭️ Skipping message sync - contact creation disabled and contact not found for ${phone}`);
@@ -3538,67 +3562,67 @@ app.post('/whatsapp/webhook', async (req, res) => {
       await subaccountHelpers.incrementAnalytics(ghlAccount.id, ghlAccount.user_id, 'received');
       return res.json({ status: 'success', reason: 'contact_creation_disabled' });
     }
-    
+
     // Track analytics for received message
     await subaccountHelpers.incrementAnalytics(ghlAccount.id, ghlAccount.user_id, 'received');
-    
+
     // Add INBOUND message (Custom provider)
     try {
-        let attachments = [];
-        
-        let finalMessage = message || "—";
-        
-        // If this is a media message, process and upload to GHL
-        if (mediaUrl && (messageType === 'image' || messageType === 'voice' || messageType === 'video' || messageType === 'audio')) {
-          console.log(`📎 Processing media message: ${messageType}`);
-          
-          try {
-            // Get GHL access token
-            const accessToken = await ensureValidToken(ghlAccount);
-            
-            let mediaBuffer;
-            
-            // Check if this is encrypted media that needs decryption
-            if (mediaUrl === 'ENCRYPTED_MEDIA' && mediaMessage) {
-              console.log(`🔓 Decrypting encrypted media with Baileys...`);
-              
-              // Get the WhatsApp client for this session
-              const client = waManager.getClient(sessionId);
-              if (!client || !client.socket) {
-                throw new Error('WhatsApp client not available for decryption');
+      let attachments = [];
+
+      let finalMessage = message || "—";
+
+      // If this is a media message, process and upload to GHL
+      if (mediaUrl && (messageType === 'image' || messageType === 'voice' || messageType === 'video' || messageType === 'audio')) {
+        console.log(`📎 Processing media message: ${messageType}`);
+
+        try {
+          // Get GHL access token
+          const accessToken = await ensureValidToken(ghlAccount);
+
+          let mediaBuffer;
+
+          // Check if this is encrypted media that needs decryption
+          if (mediaUrl === 'ENCRYPTED_MEDIA' && mediaMessage) {
+            console.log(`🔓 Decrypting encrypted media with Baileys...`);
+
+            // Get the WhatsApp client for this session
+            const client = waManager.getClient(sessionId);
+            if (!client || !client.socket) {
+              throw new Error('WhatsApp client not available for decryption');
+            }
+
+            // Decrypt the media using Baileys
+            try {
+              // Try downloadContentFromMessage first (newer method)
+              console.log(`🔄 Trying downloadContentFromMessage...`);
+              const stream = await downloadContentFromMessage(mediaMessage, messageType);
+              const chunks = [];
+              for await (const chunk of stream) {
+                chunks.push(chunk);
               }
-              
-              // Decrypt the media using Baileys
+              mediaBuffer = Buffer.concat(chunks);
+              console.log(`✅ Decrypted ${mediaBuffer.length} bytes using downloadContentFromMessage`);
+            } catch (downloadError) {
+              console.error(`❌ downloadContentFromMessage failed:`, downloadError.message);
+
+              // Fallback to downloadMediaMessage
+              console.log(`🔄 Trying fallback method downloadMediaMessage...`);
               try {
-                // Try downloadContentFromMessage first (newer method)
-                console.log(`🔄 Trying downloadContentFromMessage...`);
-                const stream = await downloadContentFromMessage(mediaMessage, messageType);
-                const chunks = [];
-                for await (const chunk of stream) {
-                  chunks.push(chunk);
-                }
-                mediaBuffer = Buffer.concat(chunks);
-                console.log(`✅ Decrypted ${mediaBuffer.length} bytes using downloadContentFromMessage`);
-              } catch (downloadError) {
-                console.error(`❌ downloadContentFromMessage failed:`, downloadError.message);
-                
-                // Fallback to downloadMediaMessage
-                console.log(`🔄 Trying fallback method downloadMediaMessage...`);
-                try {
-                  mediaBuffer = await downloadMediaMessage(
-                    mediaMessage,
-                    'buffer',
-                    {},
-                    {
-                      logger: console,
-                      reuploadRequest: client.socket.updateMediaMessage
-                    }
-                  );
-                  console.log(`✅ Decrypted ${mediaBuffer.length} bytes using downloadMediaMessage fallback`);
-                } catch (decryptError) {
-                  console.error(`❌ Media decryption failed:`, decryptError.message);
-                  
-                  // Try alternative approach - use the URL directly
+                mediaBuffer = await downloadMediaMessage(
+                  mediaMessage,
+                  'buffer',
+                  {},
+                  {
+                    logger: console,
+                    reuploadRequest: client.socket.updateMediaMessage
+                  }
+                );
+                console.log(`✅ Decrypted ${mediaBuffer.length} bytes using downloadMediaMessage fallback`);
+              } catch (decryptError) {
+                console.error(`❌ Media decryption failed:`, decryptError.message);
+
+                // Try alternative approach - use the URL directly
                 if (mediaMessage.message.audioMessage?.url) {
                   console.log(`🔄 Trying direct URL download as fallback...`);
                   const response = await fetch(mediaMessage.message.audioMessage.url);
@@ -3611,119 +3635,119 @@ app.post('/whatsapp/webhook', async (req, res) => {
                 } else {
                   throw decryptError;
                 }
-                }
-              }
-              
-            } else if (mediaUrl && mediaUrl.includes('.enc')) {
-              console.log(`🔓 Detected encrypted URL, trying direct download...`);
-              // Try direct download first
-              const response = await fetch(mediaUrl);
-              if (response.ok) {
-                mediaBuffer = Buffer.from(await response.arrayBuffer());
-                console.log(`✅ Downloaded ${mediaBuffer.length} bytes`);
-      } else {
-                throw new Error('Failed to download encrypted media');
-              }
-            } else {
-              // Regular URL download
-              const response = await fetch(mediaUrl);
-              if (response.ok) {
-                mediaBuffer = Buffer.from(await response.arrayBuffer());
-                console.log(`✅ Downloaded ${mediaBuffer.length} bytes`);
-              } else {
-                throw new Error('Failed to download media');
               }
             }
-            
-            // Upload media to GHL and get accessible URL
-            try {
-              const { uploadMediaToGHL } = require('./mediaHandler');
-              const ghlResponse = await uploadMediaToGHL(
-                mediaBuffer,
-                messageType,
-                contactId,
-                validToken,
-                locationId
-              );
-              
-              console.log(`✅ Media uploaded to GHL successfully:`, ghlResponse);
-              
-              // Get the accessible media URL from GHL response
-              const accessibleUrl = ghlResponse.url || 'Media URL not available';
-              
-              // Change 1: Send media as attachment, not as text message
-              // Use a descriptive message and put URL in attachments array
-              finalMessage = `🖼️ ${getMediaMessageText(messageType)}`;
-              attachments.push(accessibleUrl);
-              
-              console.log(`📤 Sending ${messageType} as attachment: ${accessibleUrl}`);
-              
-            } catch (uploadError) {
-              console.error(`❌ Media upload failed:`, uploadError.message);
-              
-              // Fallback: Send message with media URL as attachment
-              if (mediaUrl && !mediaUrl.includes('ENCRYPTED')) {
-                console.log(`🔄 Sending media URL as attachment instead...`);
-                
+
+          } else if (mediaUrl && mediaUrl.includes('.enc')) {
+            console.log(`🔓 Detected encrypted URL, trying direct download...`);
+            // Try direct download first
+            const response = await fetch(mediaUrl);
+            if (response.ok) {
+              mediaBuffer = Buffer.from(await response.arrayBuffer());
+              console.log(`✅ Downloaded ${mediaBuffer.length} bytes`);
+            } else {
+              throw new Error('Failed to download encrypted media');
+            }
+          } else {
+            // Regular URL download
+            const response = await fetch(mediaUrl);
+            if (response.ok) {
+              mediaBuffer = Buffer.from(await response.arrayBuffer());
+              console.log(`✅ Downloaded ${mediaBuffer.length} bytes`);
+            } else {
+              throw new Error('Failed to download media');
+            }
+          }
+
+          // Upload media to GHL and get accessible URL
+          try {
+            const { uploadMediaToGHL } = require('./mediaHandler');
+            const ghlResponse = await uploadMediaToGHL(
+              mediaBuffer,
+              messageType,
+              contactId,
+              validToken,
+              locationId
+            );
+
+            console.log(`✅ Media uploaded to GHL successfully:`, ghlResponse);
+
+            // Get the accessible media URL from GHL response
+            const accessibleUrl = ghlResponse.url || 'Media URL not available';
+
+            // Change 1: Send media as attachment, not as text message
+            // Use a descriptive message and put URL in attachments array
+            finalMessage = `🖼️ ${getMediaMessageText(messageType)}`;
+            attachments.push(accessibleUrl);
+
+            console.log(`📤 Sending ${messageType} as attachment: ${accessibleUrl}`);
+
+          } catch (uploadError) {
+            console.error(`❌ Media upload failed:`, uploadError.message);
+
+            // Fallback: Send message with media URL as attachment
+            if (mediaUrl && !mediaUrl.includes('ENCRYPTED')) {
+              console.log(`🔄 Sending media URL as attachment instead...`);
+
+              const payload = {
+                type: "SMS",  // Changed to SMS for workflow triggers
+                conversationProviderId: providerId,  // Required for workflows
+                contactId: contactId,
+                message: `🖼️ ${getMediaMessageText(messageType)}`,
+                direction: "inbound",
+                status: "delivered",
+                altId: whatsappMsgId,
+                attachments: [mediaUrl]  // Send URL directly as attachment
+              };
+
+              const inboundRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${validToken}`,
+                  Version: "2021-07-28",
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+              }, ghlAccount);
+
+              if (inboundRes.ok) {
+                console.log(`✅ Media URL sent as attachment to GHL`);
+                return res.json({
+                  status: 'success',
+                  message: 'Media sent as URL attachment'
+                });
+              }
+            }
+
+            // If all fails, fall through to text notification
+            throw uploadError;
+          }
+
+        } catch (error) {
+          console.error(`❌ Media processing failed:`, error.message);
+
+          // Fallback: Send text notification
+          finalMessage = `📎 ${getMediaMessageText(messageType)}\n\n⚠️ Media could not be processed. Please check WhatsApp directly.`;
+        }
+      }
+
+      // Change 2: Fix inbound message payload - add conversationProviderId and change type to SMS
       const payload = {
-        type: "SMS",  // Changed to SMS for workflow triggers
+        type: "SMS",  // Changed from "WhatsApp" to "SMS" for workflow triggers
         conversationProviderId: providerId,  // Required for workflows
         contactId: contactId,
-        message: `🖼️ ${getMediaMessageText(messageType)}`,
+        message: finalMessage,
         direction: "inbound",
         status: "delivered",
-        altId: whatsappMsgId,
-        attachments: [mediaUrl]  // Send URL directly as attachment
+        altId: whatsappMsgId || `wa_${Date.now()}` // idempotency
       };
-      
-      const inboundRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${validToken}`,
-          Version: "2021-07-28",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      }, ghlAccount);
-      
-      if (inboundRes.ok) {
-                  console.log(`✅ Media URL sent as attachment to GHL`);
-                  return res.json({ 
-                    status: 'success', 
-                    message: 'Media sent as URL attachment' 
-                  });
-                }
-              }
-              
-              // If all fails, fall through to text notification
-              throw uploadError;
-            }
-            
-          } catch (error) {
-            console.error(`❌ Media processing failed:`, error.message);
-            
-            // Fallback: Send text notification
-            finalMessage = `📎 ${getMediaMessageText(messageType)}\n\n⚠️ Media could not be processed. Please check WhatsApp directly.`;
-          }
-        }
-        
-        // Change 2: Fix inbound message payload - add conversationProviderId and change type to SMS
-        const payload = {
-          type: "SMS",  // Changed from "WhatsApp" to "SMS" for workflow triggers
-          conversationProviderId: providerId,  // Required for workflows
-          contactId: contactId,
-          message: finalMessage,
-          direction: "inbound",
-          status: "delivered",
-          altId: whatsappMsgId || `wa_${Date.now()}` // idempotency
-        };
-        
-        // Only add attachments field if attachments exist and are not empty
-        // GHL rejects empty arrays, so don't include the field at all if empty
-        if (attachments && attachments.length > 0) {
-          payload.attachments = attachments;
-        }
-      
+
+      // Only add attachments field if attachments exist and are not empty
+      // GHL rejects empty arrays, so don't include the field at all if empty
+      if (attachments && attachments.length > 0) {
+        payload.attachments = attachments;
+      }
+
       console.log(`📤 Sending to GHL SMS Provider:`, {
         type: payload.type,
         conversationProviderId: payload.conversationProviderId,
@@ -3733,7 +3757,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
         status: payload.status,
         altId: payload.altId
       });
-      
+
       // Send message directly to GHL (working approach)
       const inboundRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
         method: 'POST',
@@ -3744,12 +3768,12 @@ app.post('/whatsapp/webhook', async (req, res) => {
         },
         body: JSON.stringify(payload)
       }, ghlAccount);
-      
+
       if (inboundRes.ok) {
         const responseData = await inboundRes.json();
         console.log(`✅ Inbound message added to GHL conversation for contact: ${contactId}`);
         console.log(`📊 GHL Response:`, JSON.stringify(responseData, null, 2));
-        
+
         // Trigger customer_replied workflow via webhook (silent)
         try {
           const workflowPayload = {
@@ -3763,7 +3787,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
             conversation_provider_id: providerId,
             timestamp: new Date().toISOString()
           };
-          
+
           await fetch(`${process.env.BACKEND_URL || 'https://api.octendr.com'}/api/ghl-workflow`, {
             method: 'POST',
             headers: {
@@ -3774,7 +3798,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
         } catch (workflowError) {
           // Silent fail
         }
-        
+
         // Store message in local database
         try {
           // Get session info for database storage
@@ -3785,12 +3809,12 @@ app.post('/whatsapp/webhook', async (req, res) => {
               .select('*, subaccounts(*)')
               .eq('id', sessionId)
               .maybeSingle();
-            
+
             if (session) {
               sessionData = session;
             }
           }
-          
+
           // If no session found, try to find by GHL account
           if (!sessionData && ghlAccount) {
             const { data: session } = await supabaseAdmin
@@ -3800,17 +3824,17 @@ app.post('/whatsapp/webhook', async (req, res) => {
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle();
-            
+
             if (session) {
               sessionData = session;
             }
           }
-          
+
           if (sessionData) {
             // Extract phone numbers
             const fromNumber = phone.replace('+', '');
             const toNumber = sessionData.phone_number || 'unknown';
-            
+
             // Store in local messages table (silent)
             await supabaseAdmin
               .from('messages')
@@ -3833,7 +3857,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
 
         // Note: Team notifications are now handled by GHL workflows
         // The workflow will call /api/team-notification endpoint with proper team members
-        
+
         // Track this message to prevent echo
         if (!global.recentInboundMessages) {
           global.recentInboundMessages = new Set();
@@ -3852,9 +3876,9 @@ app.post('/whatsapp/webhook', async (req, res) => {
     } catch (inboundError) {
       console.error(`❌ Error adding inbound message to GHL:`, inboundError);
     }
-    
+
     // IMPORTANT: Yahan WhatsApp ko kuch wapas send na karein (no echo)
-    
+
     res.json({ status: 'success' });
   } catch (error) {
     console.error('WhatsApp webhook error:', error);
@@ -3896,15 +3920,15 @@ app.post('/ghl/provider/send', async (req, res) => {
     // Send message via WhatsApp - use consistent key format
     const cleanSubaccountId = session.subaccount_id.replace(/[^a-zA-Z0-9_-]/g, '_');
     const clientKey = `location_${cleanSubaccountId}_${session.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    
+
     console.log(`🔍 Looking for WhatsApp client with key: ${clientKey}`);
     const clientStatus = waManager.getClientStatus(clientKey);
-    
+
     if (clientStatus && (clientStatus.status === 'connected' || clientStatus.status === 'connecting')) {
       const messageText = text || message || 'Hello from GHL!';
       const msgType = messageType || 'text';
       const media = mediaUrl || null;
-      
+
       console.log(`✅ Sending WhatsApp ${msgType} to ${to}: ${messageText}`);
       if (media) {
         console.log(`📎 Media URL: ${media}`);
@@ -3914,8 +3938,8 @@ app.post('/ghl/provider/send', async (req, res) => {
     } else {
       console.error(`❌ WhatsApp client not found or not ready for key: ${clientKey}, status: ${clientStatus?.status}`);
       console.log(`📋 Available clients:`, waManager.getAllClients().map(c => c.sessionId));
-      res.status(500).json({ 
-        error: 'WhatsApp client not available', 
+      res.status(500).json({
+        error: 'WhatsApp client not available',
         status: clientStatus?.status || 'not found',
         message: 'Please scan QR code or wait for connection'
       });
@@ -3930,7 +3954,7 @@ app.post('/ghl/provider/send', async (req, res) => {
 app.get('/ghl/provider/status', async (req, res) => {
   try {
     const { locationId } = req.query;
-    
+
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
       .select('*')
@@ -3953,7 +3977,7 @@ app.get('/ghl/provider/status', async (req, res) => {
       return res.json({ status: 'disconnected', message: 'No session found' });
     }
 
-    res.json({ 
+    res.json({
       status: session.status,
       phone_number: session.phone_number,
       message: session.status === 'ready' ? 'Connected' : 'Not connected'
@@ -3972,15 +3996,15 @@ app.get('/ghl/provider', async (req, res) => {
     res.setHeader('Content-Security-Policy', "frame-ancestors *");
     res.setHeader('X-Frame-Options', 'ALLOWALL');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    
+
     let { locationId, companyId } = req.query;
-    
+
     // 🔥 CRITICAL: Try to extract locationId from referer URL FIRST (GHL context)
     // This is the PRIMARY source - URL se jo locationId aaye, wahi use karo
     if (!locationId) {
       const referer = req.get('referer') || '';
       console.log('🔍 Checking referer URL for locationId:', referer);
-      
+
       // Extract locationId from GHL URLs like: 
       // https://app.gohighlevel.com/v2/location/5iODXOPij0pdXOyIEIQi/custom-menu-link/...
       // https://app.gohighlevel.com/locations/LOCATION_ID/...
@@ -3990,7 +4014,7 @@ app.get('/ghl/provider', async (req, res) => {
         /\/location\/([a-zA-Z0-9_-]+)/,        // location/LOCATION_ID pattern
         /\/locations\/([a-zA-Z0-9_-]+)/        // locations/LOCATION_ID pattern
       ];
-      
+
       for (const pattern of locationPatterns) {
         const locationMatch = referer.match(pattern);
         if (locationMatch && locationMatch[1]) {
@@ -4001,12 +4025,12 @@ app.get('/ghl/provider', async (req, res) => {
           break; // Use first match and stop
         }
       }
-      
+
       if (!locationId) {
         console.log('⚠️ Could not extract locationId from referer:', referer);
       }
     }
-    
+
     // Try to get from GHL headers if available
     if (!locationId) {
       const ghlLocationId = req.get('x-location-id') || req.get('location-id');
@@ -4015,27 +4039,27 @@ app.get('/ghl/provider', async (req, res) => {
         console.log('✅ Found locationId from header:', locationId);
       }
     }
-    
+
     // If no locationId provided, try to detect from GHL context or company
     if (!locationId && companyId) {
       console.log('No locationId provided, looking up by companyId:', companyId);
-      
+
       // Find GHL account by company_id
       const { data: ghlAccount } = await supabaseAdmin
         .from('ghl_accounts')
         .select('location_id')
         .eq('company_id', companyId)
         .maybeSingle();
-        
+
       if (ghlAccount && ghlAccount.location_id) {
         locationId = ghlAccount.location_id;
         console.log('✅ Found locationId from company:', locationId);
       }
     }
-    
+
     // 🚫 REMOVED: Don't use first available account as fallback - this causes wrong location!
     // User must provide locationId or it should be detected from context
-    
+
     if (!locationId) {
       return res.status(200).send(`
       <!DOCTYPE html>
@@ -4151,7 +4175,7 @@ app.get('/ghl/provider', async (req, res) => {
 
     const subaccountName = ghlAccount ? `Location ${locationId}` : `Location ${locationId}`;
     const connectedNumber = session?.phone_number || null;
-    
+
     // Replace template variables in HTML
     const htmlContent = `<!DOCTYPE html>
       <html>
@@ -4664,7 +4688,7 @@ app.get('/ghl/provider', async (req, res) => {
         </body>
       </html>
     `;
-    
+
     res.send(htmlContent.replace(/\{locationId\}/g, locationId).replace(/\{subaccountName\}/g, subaccountName).replace(/\{connectedNumber\}/g, connectedNumber || 'Not connected'));
   } catch (error) {
     console.error('Provider UI error:', error);
@@ -4677,11 +4701,11 @@ app.get('/admin/ghl/account-status', async (req, res) => {
   try {
     // Get user from JWT cookie
     const token = req.cookies?.auth_token;
-    
+
     if (!token) {
       return res.status(401).json({ error: 'Authentication required' });
     }
-    
+
     const jwt = require('jsonwebtoken');
     const jwtSecret = process.env.JWT_SECRET;
     if (!jwtSecret) {
@@ -4689,30 +4713,30 @@ app.get('/admin/ghl/account-status', async (req, res) => {
       return res.status(500).json({ error: 'Server configuration error' });
     }
     let userId = null;
-    
-      try {
+
+    try {
       const decoded = jwt.verify(token, jwtSecret);
       userId = decoded.userId;
-      } catch (e) {
+    } catch (e) {
       console.log('JWT validation failed:', e.message);
       return res.status(401).json({ error: 'Invalid token' });
     }
-    
+
     // Get GHL account for this user
     const { data: ghlAccount, error: ghlError } = await supabaseAdmin
       .from('ghl_accounts')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
-      
+
     console.log('Account status check:', { userId, ghlAccount: !!ghlAccount, error: ghlError });
 
-    res.json({ 
+    res.json({
       account: ghlAccount,
       error: ghlError,
       connected: !!ghlAccount
     });
-    
+
   } catch (error) {
     console.error('Error checking account status:', error);
     res.status(500).json({ error: 'Failed to check account status' });
@@ -4724,11 +4748,11 @@ app.get('/admin/ghl/locations', async (req, res) => {
   try {
     // Get user from JWT cookie
     const token = req.cookies?.auth_token;
-    
+
     if (!token) {
       return res.status(401).json({ error: 'Authentication required' });
     }
-    
+
     const jwt = require('jsonwebtoken');
     const jwtSecret = process.env.JWT_SECRET;
     if (!jwtSecret) {
@@ -4736,7 +4760,7 @@ app.get('/admin/ghl/locations', async (req, res) => {
       return res.status(500).json({ error: 'Server configuration error' });
     }
     let userId = null;
-    
+
     try {
       const decoded = jwt.verify(token, jwtSecret);
       userId = decoded.userId;
@@ -4744,7 +4768,7 @@ app.get('/admin/ghl/locations', async (req, res) => {
       console.log('JWT validation failed:', e.message);
       return res.status(401).json({ error: 'Invalid token' });
     }
-    
+
     // Get ALL GHL accounts for this user (agency + subaccounts)
     const { data: ghlAccounts, error: ghlError } = await supabaseAdmin
       .from('ghl_accounts')
@@ -4756,22 +4780,22 @@ app.get('/admin/ghl/locations', async (req, res) => {
       console.error('GHL account lookup error:', ghlError);
       return res.status(404).json({ error: 'GHL account not found. Please connect your GHL account first.' });
     }
-    
+
     console.log(`📊 Found ${ghlAccounts.length} GHL account(s) for user ${userId}`);
-    
+
     let allLocations = [];
-    
+
     // Process each GHL account
     for (const account of ghlAccounts) {
       console.log(`🔍 Processing account - Location ID: ${account.location_id}, Company ID: ${account.company_id}`);
-      
+
       // Check if this is an agency-level account (has company_id but no specific location_id, or location_id matches company_id)
       const isAgencyAccount = account.company_id && (!account.location_id || account.location_id === account.company_id);
-      
+
       if (isAgencyAccount) {
         // Agency level - fetch all locations under this company
         console.log(`🏢 Agency account detected for company: ${account.company_id}`);
-        
+
         try {
           const ghlResponse = await fetch('https://services.leadconnectorhq.com/locations/', {
             headers: {
@@ -4779,11 +4803,11 @@ app.get('/admin/ghl/locations', async (req, res) => {
               'Version': '2021-07-28'
             }
           });
-          
+
           if (ghlResponse.ok) {
             const ghlData = await ghlResponse.json();
             console.log(`✅ Fetched ${ghlData.locations?.length || 0} locations from agency account`);
-            
+
             if (ghlData.locations && Array.isArray(ghlData.locations)) {
               // Add source info to each location
               const locationsWithSource = ghlData.locations.map(loc => ({
@@ -4802,10 +4826,10 @@ app.get('/admin/ghl/locations', async (req, res) => {
       } else if (account.location_id) {
         // Specific location/subaccount
         console.log(`📍 Subaccount detected for location: ${account.location_id}`);
-        
+
         // Check if this location is already in the list (might be from agency fetch)
         const existingLocation = allLocations.find(loc => loc.id === account.location_id);
-        
+
         if (!existingLocation) {
           // Fetch specific location details
           try {
@@ -4815,11 +4839,11 @@ app.get('/admin/ghl/locations', async (req, res) => {
                 'Version': '2021-07-28'
               }
             });
-            
+
             if (ghlResponse.ok) {
               const locationData = await ghlResponse.json();
               console.log(`✅ Fetched location details: ${locationData.name || account.location_id}`);
-              
+
               allLocations.push({
                 ...locationData,
                 source: 'subaccount',
@@ -4848,14 +4872,14 @@ app.get('/admin/ghl/locations', async (req, res) => {
         }
       }
     }
-    
+
     // Remove duplicates based on location ID
     const uniqueLocations = Array.from(
       new Map(allLocations.map(loc => [loc.id, loc])).values()
     );
-    
+
     console.log(`✅ Returning ${uniqueLocations.length} unique location(s)`);
-    
+
     res.json({
       locations: uniqueLocations,
       totalAccounts: ghlAccounts.length
@@ -4877,14 +4901,14 @@ app.post('/ghl/location/:locationId/session', async (req, res) => {
 
     // Find GHL account - try by location_id first, then fallback to any account
     let ghlAccount = null;
-    
+
     // First try to find account with matching location_id
     const { data: accountByLocation } = await supabaseAdmin
       .from('ghl_accounts')
       .select('*')
       .eq('location_id', locationId)
       .maybeSingle();
-    
+
     if (accountByLocation) {
       ghlAccount = accountByLocation;
       console.log('Found GHL account by location_id:', locationId);
@@ -4892,10 +4916,10 @@ app.post('/ghl/location/:locationId/session', async (req, res) => {
       // Fallback: use any GHL account if location_id doesn't match
       const { data: anyAccount } = await supabaseAdmin
         .from('ghl_accounts')
-      .select('*')
+        .select('*')
         .limit(1)
         .maybeSingle();
-      
+
       if (anyAccount) {
         ghlAccount = anyAccount;
         console.log('Using fallback GHL account for location:', locationId);
@@ -4923,14 +4947,14 @@ app.post('/ghl/location/:locationId/session', async (req, res) => {
 
     if (existing && existing.length > 0 && existing[0].status !== 'disconnected') {
       console.log(`📋 Found existing session: ${existing[0].id}, status: ${existing[0].status}`);
-      
+
       // If session exists but not connected, try to restore the client
       if (existing[0].status === 'ready' || existing[0].status === 'qr') {
         const cleanSubaccountId = existing[0].subaccount_id.replace(/[^a-zA-Z0-9_-]/g, '_');
         const sessionName = `location_${cleanSubaccountId}_${existing[0].id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-        
+
         console.log(`🔄 Attempting to restore client for existing session: ${sessionName}`);
-        
+
         // Try to restore the client
         try {
           await waManager.createClient(sessionName);
@@ -4939,10 +4963,10 @@ app.post('/ghl/location/:locationId/session', async (req, res) => {
           console.error(`❌ Failed to restore client for existing session:`, error);
         }
       }
-      
-      return res.json({ 
-        status: existing[0].status, 
-        qr: existing[0].qr, 
+
+      return res.json({
+        status: existing[0].status,
+        qr: existing[0].qr,
         phone_number: existing[0].phone_number,
         session_id: existing[0].id
       });
@@ -4953,7 +4977,7 @@ app.post('/ghl/location/:locationId/session', async (req, res) => {
     const { data: session, error: sessionError } = await supabaseAdmin
       .from('sessions')
       .insert({
-        user_id: ghlAccount.user_id, 
+        user_id: ghlAccount.user_id,
         subaccount_id: ghlAccount.id, // Use ghl_account ID directly
         status: 'initializing'
       })
@@ -4966,16 +4990,16 @@ app.post('/ghl/location/:locationId/session', async (req, res) => {
     }
 
     console.log('Created session:', session.id);
-    console.log('Session details:', { 
-      id: session.id, 
-      user_id: session.user_id, 
-      subaccount_id: session.subaccount_id, 
-      status: session.status 
+    console.log('Session details:', {
+      id: session.id,
+      user_id: session.user_id,
+      subaccount_id: session.subaccount_id,
+      status: session.status
     });
 
     // Verify session was saved to database
     const { data: verifySession, error: verifyError } = await supabaseAdmin
-            .from('sessions')
+      .from('sessions')
       .select('*')
       .eq('id', session.id)
       .single();
@@ -4989,14 +5013,14 @@ app.post('/ghl/location/:locationId/session', async (req, res) => {
     // Create WhatsApp client with subaccount-specific session name (clean format)
     const cleanSubaccountId = session.subaccount_id.replace(/[^a-zA-Z0-9_-]/g, '_');
     const sessionName = `location_${cleanSubaccountId}_${session.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    
+
     // Add timeout for WhatsApp client initialization
     const initTimeout = setTimeout(async () => {
-        try {
-          await supabaseAdmin
-            .from('sessions')
+      try {
+        await supabaseAdmin
+          .from('sessions')
           .update({ status: 'disconnected' })
-            .eq('id', session.id);
+          .eq('id', session.id);
         console.log(`WhatsApp initialization timeout for location ${locationId}`);
       } catch (e) {
         console.error('Timeout update error:', e);
@@ -5004,49 +5028,49 @@ app.post('/ghl/location/:locationId/session', async (req, res) => {
     }, 300000); // 300 seconds timeout (5 minutes for WhatsApp connection)
 
     console.log(`Creating Baileys client with sessionName: ${sessionName}`);
-    
+
     // Create Baileys client
     try {
       const client = await waManager.createClient(sessionName);
       console.log(`✅ Baileys client created for session: ${sessionName}`);
-      
+
       // Wait a moment for QR to be generated
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
+
       // Check if QR is already available
       const qrCode = await waManager.getQRCode(sessionName);
       if (qrCode) {
         console.log(`📱 QR already available, updating database immediately...`);
         const qrDataUrl = await qrcode.toDataURL(qrCode);
-          await supabaseAdmin
-            .from('sessions')
+        await supabaseAdmin
+          .from('sessions')
           .update({ qr: qrDataUrl, status: 'qr' })
-            .eq('id', session.id);
+          .eq('id', session.id);
         console.log(`✅ QR updated in database immediately`);
       }
-        } catch (error) {
-        console.error(`❌ Failed to create Baileys client:`, error);
+    } catch (error) {
+      console.error(`❌ Failed to create Baileys client:`, error);
       return res.status(500).json({ error: 'Failed to create WhatsApp client' });
     }
-    
+
     // Set up QR code polling
     const qrPolling = setInterval(async () => {
       try {
         console.log(`🔍 Checking for QR code for session: ${sessionName}`);
         const qrCode = await waManager.getQRCode(sessionName);
         console.log(`📱 QR code result:`, qrCode ? 'Found' : 'Not found');
-        
+
         if (qrCode) {
           clearTimeout(initTimeout); // Clear timeout when QR is generated
           console.log(`🔄 Converting QR to data URL...`);
           const qrDataUrl = await qrcode.toDataURL(qrCode);
           console.log(`💾 Saving QR to database...`);
-          
+
           const { error: qrUpdateError } = await supabaseAdmin
             .from('sessions')
             .update({ qr: qrDataUrl, status: 'qr' })
             .eq('id', session.id);
-          
+
           if (qrUpdateError) {
             console.error('❌ QR update failed:', qrUpdateError);
           } else {
@@ -5064,27 +5088,27 @@ app.post('/ghl/location/:locationId/session', async (req, res) => {
       try {
         const status = waManager.getClientStatus(sessionName);
         console.log(`📊 Status check for ${sessionName}:`, status);
-        
+
         if (status && status.status === 'connected') {
           clearInterval(qrPolling);
           clearInterval(statusPolling);
           clearTimeout(initTimeout);
-          
+
           // Get phone number from client
           const client = waManager.getClientsMap()?.get(sessionName);
           const phoneNumber = client?.phoneNumber || 'Unknown';
-          
+
           console.log(`📱 Connected phone number: ${phoneNumber}`);
-          
+
           const { error: readyUpdateError } = await supabaseAdmin
             .from('sessions')
-            .update({ 
-              status: 'ready', 
+            .update({
+              status: 'ready',
               qr: null,
               phone_number: phoneNumber
             })
             .eq('id', session.id);
-          
+
           if (readyUpdateError) {
             console.error('Ready update failed:', readyUpdateError);
           } else {
@@ -5106,8 +5130,8 @@ app.post('/ghl/location/:locationId/session', async (req, res) => {
     }, 300000); // 5 minutes timeout
 
     // Return session info
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       session: {
         id: session.id,
         status: 'initializing',
@@ -5126,13 +5150,13 @@ app.get('/ghl/location/:locationId/session', async (req, res) => {
 
     // Find GHL account for this location first (try by location_id, then fallback)
     let ghlAccount = null;
-    
+
     const { data: accountByLocation } = await supabaseAdmin
       .from('ghl_accounts')
       .select('id, user_id')
       .eq('location_id', locationId)
       .maybeSingle();
-    
+
     if (accountByLocation) {
       ghlAccount = accountByLocation;
     } else {
@@ -5142,7 +5166,7 @@ app.get('/ghl/location/:locationId/session', async (req, res) => {
         .select('id, user_id')
         .limit(1)
         .maybeSingle();
-      
+
       if (anyAccount) {
         ghlAccount = anyAccount;
       }
@@ -5176,7 +5200,7 @@ app.get('/ghl/location/:locationId/session', async (req, res) => {
 app.post('/ghl/location/:locationId/session/logout', async (req, res) => {
   try {
     const { locationId } = req.params;
-    
+
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
       .select('*')
@@ -5202,16 +5226,16 @@ app.post('/ghl/location/:locationId/session/logout', async (req, res) => {
     // Disconnect WhatsApp client FIRST (this will logout from mobile)
     const cleanSubaccountId = ghlAccount.id.replace(/[^a-zA-Z0-9_-]/g, '_');
     const sessionName = `location_${cleanSubaccountId}_${session.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    
+
     console.log(`🔌 Disconnecting WhatsApp session: ${sessionName}`);
-    
+
     // Step 1: Update database status to disconnected first
     await supabaseAdmin
       .from('sessions')
       .update({ status: 'disconnected' })
       .eq('id', session.id);
     console.log(`📊 Database status updated to disconnected`);
-    
+
     // Step 2: Disconnect from WhatsApp (this logs out from mobile)
     try {
       await waManager.disconnectClient(sessionName);
@@ -5220,7 +5244,7 @@ app.post('/ghl/location/:locationId/session/logout', async (req, res) => {
       console.error(`⚠️ Error disconnecting WhatsApp: ${disconnectError.message}`);
       // Continue with cleanup even if disconnect fails
     }
-    
+
     // Step 3: Clear session data (removes auth files)
     try {
       waManager.clearSessionData(sessionName);
@@ -5228,7 +5252,7 @@ app.post('/ghl/location/:locationId/session/logout', async (req, res) => {
     } catch (clearError) {
       console.error(`⚠️ Error clearing session data: ${clearError.message}`);
     }
-    
+
     // Step 4: Send email notification for dashboard logout
     try {
       const emailService = require('./lib/email');
@@ -5262,7 +5286,7 @@ app.post('/ghl/location/:locationId/session/logout', async (req, res) => {
 app.post('/ghl/location/:locationId/session/reset', async (req, res) => {
   try {
     const { locationId } = req.params;
-    
+
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
       .select('*')
@@ -5288,13 +5312,13 @@ app.post('/ghl/location/:locationId/session/reset', async (req, res) => {
           // Try both session name formats to ensure cleanup
           const cleanSubaccountId = ghlAccount.id.replace(/[^a-zA-Z0-9_-]/g, '_');
           const cleanSessionId = session.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-          
+
           // Format 1: location_${subaccountId}_${sessionId}
           const sessionName1 = `location_${cleanSubaccountId}_${cleanSessionId}`;
-          
+
           // Format 2: subaccount_${subaccountId}_${sessionId} (legacy)
           const sessionName2 = `subaccount_${ghlAccount.id}_${session.id}`;
-          
+
           // Cleanup both formats
           try {
             await waManager.disconnectClient(sessionName1);
@@ -5303,7 +5327,7 @@ app.post('/ghl/location/:locationId/session/reset', async (req, res) => {
           } catch (e) {
             console.log(`⚠️ Session format 1 not found: ${sessionName1}`);
           }
-          
+
           try {
             await waManager.disconnectClient(sessionName2);
             waManager.clearSessionData(sessionName2);
@@ -5329,8 +5353,8 @@ app.post('/ghl/location/:locationId/session/reset', async (req, res) => {
     }
 
     console.log(`✅ Reset session completed: ${sessions?.length || 0} session(s) deleted for location: ${locationId}`);
-    res.json({ 
-      status: 'success', 
+    res.json({
+      status: 'success',
       message: `Session reset successfully. ${sessions?.length || 0} session(s) deleted.`,
       deletedCount: sessions?.length || 0
     });
@@ -5344,7 +5368,7 @@ app.post('/ghl/location/:locationId/session/reset', async (req, res) => {
 app.delete('/admin/ghl/delete-subaccount', requireAuth, async (req, res) => {
   try {
     const { locationId } = req.body;
-    
+
     if (!locationId) {
       return res.status(400).json({ error: 'Location ID is required' });
     }
@@ -5378,13 +5402,13 @@ app.delete('/admin/ghl/delete-subaccount', requireAuth, async (req, res) => {
           // Try both session name formats to ensure cleanup
           const cleanSubaccountId = ghlAccount.id.replace(/[^a-zA-Z0-9_-]/g, '_');
           const cleanSessionId = session.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-          
+
           // Format 1: location_${subaccountId}_${sessionId} (used in /ghl/location endpoints)
           const sessionName1 = `location_${cleanSubaccountId}_${cleanSessionId}`;
-          
+
           // Format 2: subaccount_${subaccountId}_${sessionId} (legacy format)
           const sessionName2 = `subaccount_${ghlAccount.id}_${session.id}`;
-          
+
           // Cleanup both formats to be safe
           try {
             await waManager.disconnectClient(sessionName1);
@@ -5393,7 +5417,7 @@ app.delete('/admin/ghl/delete-subaccount', requireAuth, async (req, res) => {
           } catch (e) {
             console.log(`⚠️ Session format 1 not found: ${sessionName1}`);
           }
-          
+
           try {
             await waManager.disconnectClient(sessionName2);
             waManager.clearSessionData(sessionName2);
@@ -5435,7 +5459,7 @@ app.delete('/admin/ghl/delete-subaccount', requireAuth, async (req, res) => {
     // Mark location as inactive in used_locations (for anti-abuse tracking)
     const { error: updateUsedLocationError } = await supabaseAdmin
       .from('used_locations')
-      .update({ 
+      .update({
         is_active: false,
         last_active_at: new Date().toISOString()
       })
@@ -5461,7 +5485,7 @@ app.delete('/admin/ghl/delete-subaccount', requireAuth, async (req, res) => {
 app.post('/admin/ghl/sync-all-subaccounts', async (req, res) => {
   try {
     console.log('🔄 Starting sync for all subaccounts...');
-    
+
     // Get all GHL accounts
     const { data: ghlAccounts } = await supabaseAdmin
       .from('ghl_accounts')
@@ -5469,10 +5493,10 @@ app.post('/admin/ghl/sync-all-subaccounts', async (req, res) => {
       .not('refresh_token', 'is', null);
 
     if (!ghlAccounts || ghlAccounts.length === 0) {
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         message: 'No subaccounts found to sync',
-        syncedCount: 0 
+        syncedCount: 0
       });
     }
 
@@ -5485,7 +5509,7 @@ app.post('/admin/ghl/sync-all-subaccounts', async (req, res) => {
     for (const ghlAccount of ghlAccounts) {
       try {
         console.log(`🔄 Syncing subaccount: ${ghlAccount.location_id}`);
-        
+
         // 1. Refresh token
         let tokenRefreshed = false;
         try {
@@ -5498,7 +5522,7 @@ app.post('/admin/ghl/sync-all-subaccounts', async (req, res) => {
 
         // 2. Get existing sessions
         const { data: sessions } = await supabaseAdmin
-      .from('sessions')
+          .from('sessions')
           .select('*')
           .eq('subaccount_id', ghlAccount.id)
           .order('created_at', { ascending: false });
@@ -5508,23 +5532,23 @@ app.post('/admin/ghl/sync-all-subaccounts', async (req, res) => {
         if (sessions && sessions.length > 0) {
           const latestSession = sessions[0];
           const sessionName = `location_${ghlAccount.id}_${latestSession.id}`;
-          
+
           try {
             // Check current client status
             const clientStatus = waManager.getClientStatus(sessionName);
             console.log(`🔍 Current client status for ${ghlAccount.location_id}: ${clientStatus?.status || 'not found'}`);
-            
+
             // If client is not connected or in qr_ready state, reconnect
             if (!clientStatus || (clientStatus.status !== 'connected' && clientStatus.status !== 'connecting')) {
               // Disconnect existing client if any
               await waManager.disconnectClient(sessionName);
               waManager.clearSessionData(sessionName);
-              
+
               // Create new client
               await waManager.createClient(sessionName);
               sessionReconnected = true;
               console.log(`✅ WhatsApp session reconnected for: ${ghlAccount.location_id}`);
-    } else {
+            } else {
               console.log(`✅ WhatsApp session already active for: ${ghlAccount.location_id}`);
               sessionReconnected = true;
             }
@@ -5554,8 +5578,8 @@ app.post('/admin/ghl/sync-all-subaccounts', async (req, res) => {
 
     console.log(`✅ Sync completed: ${syncedCount} successful, ${errorCount} failed`);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: `Sync completed: ${syncedCount} subaccounts processed`,
       syncedCount,
       errorCount,
@@ -5564,9 +5588,9 @@ app.post('/admin/ghl/sync-all-subaccounts', async (req, res) => {
 
   } catch (error) {
     console.error('Sync all subaccounts error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to sync subaccounts',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -5648,10 +5672,10 @@ app.get('/debug/whatsapp-clients', async (req, res) => {
       hasQR: client.hasQR,
       isConnected: client.status === 'connected'
     }));
-    
+
     // Get version info (now async)
     const versionInfo = await waManager.getWhatsAppVersion();
-    
+
     res.json({
       totalClients: clients.length,
       clients: clientInfo,
@@ -5669,9 +5693,9 @@ app.post('/debug/clear-session/:sessionId', (req, res) => {
   try {
     const { sessionId } = req.params;
     console.log(`🗑️ Clearing session data for: ${sessionId}`);
-    
+
     waManager.clearSessionData(sessionId);
-    
+
     res.json({
       success: true,
       message: `Session data cleared for ${sessionId}`,
@@ -5694,7 +5718,7 @@ app.get('/debug/session-status/:locationId', async (req, res) => {
       .select('*')
       .eq('location_id', locationId)
       .maybeSingle();
-    
+
     if (!ghlAccount) {
       return res.status(404).json({ error: 'GHL account not found' });
     }
@@ -5707,28 +5731,28 @@ app.get('/debug/session-status/:locationId', async (req, res) => {
       .eq('subaccount_id', ghlAccount.id)
       .order('created_at', { ascending: false })
       .limit(1);
-    
+
     if (!session || session.length === 0) {
-      return res.json({ 
-        session: null, 
-        message: 'No session found' 
+      return res.json({
+        session: null,
+        message: 'No session found'
       });
     }
-    
+
     const currentSession = session[0];
     const cleanSubaccountId = currentSession.subaccount_id.replace(/[^a-zA-Z0-9_-]/g, '_');
     const sessionName = `location_${cleanSubaccountId}_${currentSession.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    
+
     // Get client status
     const clientStatus = waManager.getClientStatus(sessionName);
-    
+
     res.json({
       session: currentSession,
       sessionName,
       clientStatus,
       allClients: waManager.getAllClients()
     });
-    
+
   } catch (error) {
     console.error('Session status error:', error);
     res.status(500).json({ error: 'Failed to get session status' });
@@ -5746,21 +5770,21 @@ app.post('/debug/refresh-token/:locationId', async (req, res) => {
       .select('*')
       .eq('location_id', locationId)
       .maybeSingle();
-    
+
     if (!ghlAccount) {
       return res.status(404).json({ error: 'GHL account not found' });
     }
 
     // Force token refresh
     const newToken = await refreshGHLToken(ghlAccount);
-    
+
     res.json({
       success: true,
       message: 'Token refreshed successfully',
       locationId,
       newToken: newToken.substring(0, 20) + '...' // Show first 20 chars only
     });
-    
+
   } catch (error) {
     console.error('Manual token refresh error:', error);
     res.status(500).json({ error: 'Failed to refresh token' });
@@ -5799,12 +5823,12 @@ app.get('/debug/test-token/:locationId', async (req, res) => {
       locationId,
       tokenExpires: ghlAccount.token_expires_at
     });
-    
+
   } catch (error) {
     console.error('Token test error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to test token',
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -5813,23 +5837,23 @@ app.get('/debug/test-token/:locationId', async (req, res) => {
 app.post('/debug/send-message', async (req, res) => {
   try {
     const { phoneNumber, message } = req.body;
-    
+
     if (!phoneNumber || !message) {
       return res.status(400).json({ error: 'Phone number and message required' });
     }
-    
+
     const clients = waManager.getAllClients();
-    
+
     if (clients.length === 0) {
       return res.status(404).json({ error: 'No WhatsApp clients available' });
     }
-    
+
     const client = clients[0];
     const sessionKey = client.sessionId;
     console.log(`Sending test message using client: ${sessionKey}`);
-    
+
     await waManager.sendMessage(sessionKey, phoneNumber, message);
-    
+
     res.json({
       success: true,
       message: 'Message sent successfully',
@@ -5847,11 +5871,11 @@ app.post('/debug/send-message', async (req, res) => {
 app.post('/debug/test-incoming', async (req, res) => {
   try {
     const { from, message, locationId } = req.body;
-    
+
     if (!from || !message) {
       return res.status(400).json({ error: 'From and message required' });
     }
-    
+
     // Simulate incoming WhatsApp message
     const webhookData = {
       from: from.includes('@') ? from : `${from}@s.whatsapp.net`,
@@ -5859,9 +5883,9 @@ app.post('/debug/test-incoming', async (req, res) => {
       timestamp: Date.now(),
       whatsappMsgId: `test_${Date.now()}`
     };
-    
+
     console.log('🧪 Testing webhook with data:', webhookData);
-    
+
     // Call the webhook internally
     const webhookResponse = await fetch(`${process.env.BACKEND_URL || 'https://api.octendr.com'}/whatsapp/webhook`, {
       method: 'POST',
@@ -5870,9 +5894,9 @@ app.post('/debug/test-incoming', async (req, res) => {
       },
       body: JSON.stringify(webhookData)
     });
-    
+
     const responseText = await webhookResponse.text();
-    
+
     res.json({
       success: true,
       message: 'Test webhook called',
@@ -5891,29 +5915,29 @@ app.post('/debug/test-incoming', async (req, res) => {
 app.post('/emergency/send-message', async (req, res) => {
   try {
     const { phoneNumber, message, locationId } = req.body;
-    
+
     if (!phoneNumber || !message) {
       return res.status(400).json({ error: 'Phone number and message required' });
     }
-    
+
     console.log(`🚨 Emergency message sending to: ${phoneNumber}`);
-    
+
     // Direct message sending without client dependency
     console.log(`🚨 Direct emergency message sending to: ${phoneNumber}`);
-    
+
     // Try to find any available client first
     const clients = waManager.getAllClients();
     let messageSent = false;
-    
+
     if (clients.length > 0) {
       console.log(`Found ${clients.length} available clients`);
-      
+
       for (const client of clients) {
         try {
           const sessionKey = client.sessionId;
           console.log(`Trying client: ${sessionKey}`);
           console.log(`Client status:`, client.status);
-          
+
           if (client.status === 'connected') {
             console.log(`Client ready, sending message...`);
             await waManager.sendMessage(sessionKey, phoneNumber, message);
@@ -5931,17 +5955,17 @@ app.post('/emergency/send-message', async (req, res) => {
     } else {
       console.log(`No clients available`);
     }
-    
+
     if (!messageSent) {
       console.log(`❌ No working clients found, message not sent`);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'No working WhatsApp clients available',
         phoneNumber,
         message,
         availableClients: clients.length
       });
     }
-    
+
     res.json({
       success: true,
       message: 'Emergency message sent successfully',
@@ -5949,7 +5973,7 @@ app.post('/emergency/send-message', async (req, res) => {
       message,
       availableClients: clients.length
     });
-    
+
   } catch (error) {
     console.error('Emergency message error:', error);
     res.status(500).json({ error: 'Failed to send emergency message', details: error.message });
@@ -5961,22 +5985,22 @@ app.post('/emergency/send-message', async (req, res) => {
 app.post('/debug/test-outbound', async (req, res) => {
   try {
     const { contactId, text } = req.body;
-    
+
     if (!contactId || !text) {
       return res.status(400).json({ error: 'ContactId and text required' });
     }
-    
+
     // Simulate GHL outbound message
     const webhookData = {
       contactId: contactId,
       text: text,
       locationId: process.env.GHL_LOCATION_ID
     };
-    
+
     console.log('🧪 Test endpoint called - provider-outbound webhook has been removed');
-    
-    res.json({ 
-      status: 'success', 
+
+    res.json({
+      status: 'success',
       message: 'Provider outbound webhook has been removed. This endpoint is no longer used.'
     });
   } catch (error) {
@@ -5989,46 +6013,46 @@ app.post('/debug/test-outbound', async (req, res) => {
 app.post('/api/ghl-workflow', async (req, res) => {
   try {
     console.log('🔄 GHL Workflow webhook received:', JSON.stringify(req.body, null, 2));
-    
-    const { 
-      event_type, 
-      contact_id, 
-      contact_name, 
-      contact_phone, 
-      last_message, 
-      assigned_user, 
+
+    const {
+      event_type,
+      contact_id,
+      contact_name,
+      contact_phone,
+      last_message,
+      assigned_user,
       location_id,
       conversation_id,
       workflow_id,
-      team_members 
+      team_members
     } = req.body;
-    
+
     // Handle different workflow events
     switch (event_type) {
       case 'customer_replied':
         console.log('🔔 Customer replied workflow triggered');
-        
+
         // Get team members from workflow data or assigned user
         let notificationRecipients = [];
-        
+
         if (team_members && Array.isArray(team_members)) {
           notificationRecipients = team_members;
         } else if (assigned_user) {
           notificationRecipients = [assigned_user];
         }
-        
+
         if (notificationRecipients.length > 0) {
           console.log(`📱 Sending notifications to: ${notificationRecipients.join(', ')}`);
-          
+
           // Find available WhatsApp client
-          const availableClients = waManager.getAllClients().filter(client => 
+          const availableClients = waManager.getAllClients().filter(client =>
             client.status === 'connected' || client.status === 'ready'
           );
-          
+
           if (availableClients.length > 0) {
             const notificationClient = availableClients[0];
             const clientKey = notificationClient.sessionId;
-            
+
             // Format notification message
             let notificationMessage = `🔔 *Customer Replied*\n\n`;
             if (contact_name) {
@@ -6040,7 +6064,7 @@ app.post('/api/ghl-workflow', async (req, res) => {
             if (last_message) {
               notificationMessage += `💬 Message: ${last_message}`;
             }
-            
+
             // Send notifications
             const results = [];
             for (const recipient of notificationRecipients) {
@@ -6058,16 +6082,16 @@ app.post('/api/ghl-workflow', async (req, res) => {
                 results.push({ phone: recipient, status: 'failed', error: error.message });
               }
             }
-            
+
             res.json({
               status: 'success',
               message: `Notifications sent to ${results.filter(r => r.status === 'success').length}/${notificationRecipients.length} recipients`,
               results
             });
           } else {
-            res.status(503).json({ 
-              status: 'error', 
-              message: 'No WhatsApp clients available for notifications' 
+            res.status(503).json({
+              status: 'error',
+              message: 'No WhatsApp clients available for notifications'
             });
           }
         } else {
@@ -6077,30 +6101,30 @@ app.post('/api/ghl-workflow', async (req, res) => {
           });
         }
         break;
-        
+
       case 'new_lead':
         console.log('🆕 New lead workflow triggered');
         // Handle new lead logic here
         res.json({ status: 'success', message: 'New lead workflow processed' });
         break;
-        
+
       case 'follow_up':
         console.log('📞 Follow up workflow triggered');
         // Handle follow up logic here
         res.json({ status: 'success', message: 'Follow up workflow processed' });
         break;
-        
+
       default:
         console.log(`ℹ️ Unknown workflow event: ${event_type}`);
         res.json({ status: 'success', message: 'Workflow event logged' });
     }
-    
+
   } catch (error) {
     console.error('❌ GHL Workflow webhook error:', error);
-    res.status(500).json({ 
-      status: 'error', 
+    res.status(500).json({
+      status: 'error',
       message: 'Workflow processing failed',
-      error: error.message 
+      error: error.message
     });
   }
 });
@@ -6110,7 +6134,7 @@ app.post('/api/ghl-workflow', async (req, res) => {
 app.post('/webhooks/ghl/action-execute', async (req, res) => {
   try {
     console.log('🎯 GHL Marketplace Action Execute received:', JSON.stringify(req.body, null, 2));
-    
+
     // GHL Marketplace Action payload structure:
     // {
     //   "data": { "message_body": "..." },
@@ -6118,12 +6142,12 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
     //   "meta": { "key": "...", "version": "..." },
     //   "isMarketplaceAction": true
     // }
-    
+
     const { data, extras, meta } = req.body;
-    
+
     if (!extras || !extras.locationId || !extras.contactId) {
       console.error('❌ Missing required fields: locationId or contactId');
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: {
           status: 'error',
           message: 'locationId and contactId are required'
@@ -6131,21 +6155,21 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
         status: 400
       });
     }
-    
+
     const locationId = extras.locationId;
     const contactId = extras.contactId;
     const messageText = data?.message_body || data?.message || 'Message from GHL workflow';
-    
+
     // Get GHL account by locationId
     const { data: ghlAccount } = await supabaseAdmin
       .from('ghl_accounts')
       .select('*')
       .eq('location_id', locationId)
       .maybeSingle();
-    
+
     if (!ghlAccount) {
       console.error(`❌ GHL account not found for locationId: ${locationId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: {
           status: 'error',
           message: 'GHL account not found for this location'
@@ -6153,16 +6177,16 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
         status: 404
       });
     }
-    
+
     // Fetch contact from GHL API to get phone number
     const GHLClient = require('./lib/ghl');
     const ghlClient = new GHLClient(ghlAccount.access_token, locationId);
-    
+
     let phoneNumber = null;
     try {
       const contactResponse = await ghlClient.getContact(contactId);
       console.log('📋 Contact response from GHL:', JSON.stringify(contactResponse, null, 2));
-      
+
       // GHL contact response structure: { contact: { phone: "...", ... } } or { phone: "..." }
       if (contactResponse?.contact?.phone) {
         phoneNumber = contactResponse.contact.phone;
@@ -6172,24 +6196,24 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
         console.log(`✅ Fetched phone number from GHL: ${phoneNumber}`);
       } else {
         // Try alternative phone fields
-        phoneNumber = contactResponse?.phoneNumber || 
-                     contactResponse?.contact?.phoneNumber || 
-                     contactResponse?.customFields?.phone ||
-                     contactResponse?.contact?.customFields?.phone;
+        phoneNumber = contactResponse?.phoneNumber ||
+          contactResponse?.contact?.phoneNumber ||
+          contactResponse?.customFields?.phone ||
+          contactResponse?.contact?.customFields?.phone;
       }
     } catch (ghlError) {
       console.error('❌ Error fetching contact from GHL:', ghlError.message || ghlError);
       // Continue with fallback - try to get from request body
     }
-    
+
     // Fallback: Check if phone is in request body directly
     if (!phoneNumber) {
       phoneNumber = req.body.phone || req.body.data?.phone || extras?.phone;
     }
-    
+
     if (!phoneNumber) {
       console.error('❌ No phone number found in contact data');
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: {
           status: 'error',
           message: 'Phone number is required. Could not fetch from contact.'
@@ -6197,7 +6221,7 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
         status: 400
       });
     }
-    
+
     // Get active WhatsApp session for this account
     const { data: session } = await supabaseAdmin
       .from('sessions')
@@ -6207,10 +6231,10 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    
+
     if (!session) {
       console.error(`❌ No active WhatsApp session found for locationId: ${locationId}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: {
           status: 'error',
           message: 'No active WhatsApp session found'
@@ -6218,16 +6242,16 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
         status: 404
       });
     }
-    
+
     // Build client key
     const cleanSubaccountId = session.subaccount_id?.replace(/[^a-zA-Z0-9_-]/g, '_') || ghlAccount.id;
     const clientKey = `location_${cleanSubaccountId}_${session.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-    
+
     // Check client status
     const clientStatus = waManager.getClientStatus(clientKey);
     if (!clientStatus || (clientStatus.status !== 'connected' && clientStatus.status !== 'ready')) {
       console.error(`❌ WhatsApp client not connected for session: ${session.id}`);
-      return res.status(503).json({ 
+      return res.status(503).json({
         error: {
           status: 'error',
           message: 'WhatsApp client not connected'
@@ -6235,13 +6259,13 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
         status: 503
       });
     }
-    
+
     // Format phone number (E.164 format)
     let formattedPhone = phoneNumber.toString().trim();
     if (!formattedPhone.startsWith('+')) {
       formattedPhone = '+' + formattedPhone.replace(/^\+/, '');
     }
-    
+
     // Send WhatsApp message
     try {
       await waManager.sendMessage(
@@ -6250,9 +6274,9 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
         messageText,
         'text'
       );
-      
+
       console.log(`✅ Message sent via GHL Marketplace Action: ${formattedPhone}`);
-      
+
       // Log the action execution
       await supabaseAdmin.from('subscription_events').insert({
         user_id: ghlAccount.user_id,
@@ -6267,7 +6291,7 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
           workflow_id: extras.workflowId
         }
       });
-      
+
       res.json({
         status: 'success',
         message: 'Message sent successfully',
@@ -6280,7 +6304,7 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
       });
     } catch (sendError) {
       console.error('❌ Error sending WhatsApp message:', sendError);
-      res.status(500).json({ 
+      res.status(500).json({
         error: {
           status: 'error',
           message: 'Failed to send WhatsApp message',
@@ -6289,10 +6313,10 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
         status: 500
       });
     }
-    
+
   } catch (error) {
     console.error('❌ GHL Marketplace Action Execute error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: {
         status: 'error',
         message: 'Action execution failed',
@@ -6307,71 +6331,71 @@ app.post('/webhooks/ghl/action-execute', async (req, res) => {
 app.post('/api/team-notification', async (req, res) => {
   try {
     console.log('🔔 Team notification webhook received:', JSON.stringify(req.body, null, 2));
-    
+
     // Support both old format (message, user) and new format (last_message, assigned_user, contact_phone, contact_name)
     const message = req.body.message || req.body.last_message;
     let user = req.body.user || req.body.assigned_user;
     const contactName = req.body.contact_name;
     const contactPhone = req.body.contact_phone;
-    
+
     // Support multiple users (comma-separated)
     const users = user ? user.split(',').map(u => u.trim()).filter(u => u) : [];
-    
+
     // Validate required fields
     if (!message) {
       console.log('❌ Missing required field: message or last_message');
-      return res.status(400).json({ 
-        status: 'error', 
+      return res.status(400).json({
+        status: 'error',
         message: 'Missing required field: message or last_message',
         receivedFields: Object.keys(req.body)
       });
     }
-    
+
     if (users.length === 0) {
       console.log('❌ Missing required field: user or assigned_user');
-      return res.status(400).json({ 
-        status: 'error', 
+      return res.status(400).json({
+        status: 'error',
         message: 'Missing required field: user (phone number) or assigned_user',
         receivedFields: Object.keys(req.body)
       });
     }
-    
+
     console.log(`📱 Sending notification to ${users.length} team member(s): ${users.join(', ')}`);
     console.log(`👤 Contact name: ${contactName || 'N/A'}`);
     console.log(`📞 Contact phone: ${contactPhone || 'N/A'}`);
     console.log(`💬 Message content: ${message}`);
-    
+
     // Find an available WhatsApp client for sending notifications
-    const availableClients = waManager.getAllClients().filter(client => 
+    const availableClients = waManager.getAllClients().filter(client =>
       client.status === 'connected' || client.status === 'ready'
     );
-    
+
     if (availableClients.length === 0) {
       console.log('❌ No available WhatsApp clients for team notifications');
-      return res.status(503).json({ 
-        status: 'error', 
-        message: 'No WhatsApp clients available for notifications' 
+      return res.status(503).json({
+        status: 'error',
+        message: 'No WhatsApp clients available for notifications'
       });
     }
-    
+
     // Use the first available client for notifications
     const notificationClient = availableClients[0];
     const clientKey = notificationClient.sessionId;
-    
+
     console.log(`📱 Using client: ${clientKey} for team notifications`);
-    
+
     // Format notification message with contact details
     let notificationMessage = `🔔 *Customer Replied*\n\n`;
-    
+
     if (contactName) {
       notificationMessage += `👤 Customer: ${contactName}\n`;
     }
     if (contactPhone) {
       notificationMessage += `📞 Phone: ${contactPhone}\n`;
     }
-    
+
     notificationMessage += `💬 Message: ${message}`;
-    
+
     // Send notification to all team members
     const results = [];
     for (const userPhone of users) {
@@ -6389,19 +6413,19 @@ app.post('/api/team-notification', async (req, res) => {
         results.push({ phone: userPhone, status: 'failed', error: error.message });
       }
     }
-    
+
     res.json({
       status: 'success',
       message: `Team notifications sent to ${results.filter(r => r.status === 'success').length}/${users.length} recipients`,
       recipients: results,
       clientUsed: clientKey
     });
-    
+
   } catch (error) {
     console.error('❌ Team notification error:', error);
-    res.status(500).json({ 
-      status: 'error', 
-      message: error.message 
+    res.status(500).json({
+      status: 'error',
+      message: error.message
     });
   }
 });
@@ -6410,25 +6434,25 @@ app.post('/api/team-notification', async (req, res) => {
 app.post('/admin/force-reauthorize/:accountId', async (req, res) => {
   try {
     const { accountId } = req.params;
-    
+
     console.log(`🔄 Force re-authorization for account: ${accountId}`);
-    
+
     // Delete the account tokens to force re-auth
     const { error } = await supabaseAdmin
       .from('ghl_accounts')
       .delete()
       .eq('id', accountId);
-    
+
     if (error) {
       throw error;
     }
-    
+
     res.json({
       status: 'success',
       message: 'Account deleted. Please re-authorize with new scopes.',
       authUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard`
     });
-    
+
   } catch (error) {
     console.error('Force reauth error:', error);
     res.status(500).json({ error: error.message });
@@ -6439,12 +6463,12 @@ app.post('/admin/force-reauthorize/:accountId', async (req, res) => {
 app.post('/api/test-team-notification', async (req, res) => {
   try {
     console.log('🧪 Testing team notification webhook');
-    
+
     const testData = {
       message: 'This is a test message from customer',
       user: '+923001234567' // Replace with actual team member number
     };
-    
+
     // Call the team notification endpoint internally
     const notificationResponse = await fetch(`${process.env.BACKEND_URL || 'https://api.octendr.com'}/api/team-notification`, {
       method: 'POST',
@@ -6453,16 +6477,16 @@ app.post('/api/test-team-notification', async (req, res) => {
       },
       body: JSON.stringify(testData)
     });
-    
+
     const result = await notificationResponse.json();
-    
+
     res.json({
       status: 'success',
       message: 'Team notification test completed',
       testData,
       notificationResult: result
     });
-    
+
   } catch (error) {
     console.error('Test team notification error:', error);
     res.status(500).json({ error: error.message });
@@ -6474,9 +6498,9 @@ app.get('/messages/session/:sessionId', requireAuth, async (req, res) => {
   try {
     const { sessionId } = req.params;
     const { limit = 50 } = req.query;
-    
+
     console.log(`📨 Fetching messages for session: ${sessionId}, limit: ${limit}`);
-    
+
     // Get messages from database
     const { data: messages, error } = await supabaseAdmin
       .from('messages')
@@ -6485,14 +6509,14 @@ app.get('/messages/session/:sessionId', requireAuth, async (req, res) => {
       .eq('user_id', req.user.id) // Ensure user can only access their own messages
       .order('created_at', { ascending: true })
       .limit(parseInt(limit));
-    
+
     if (error) {
       console.error('❌ Error fetching messages:', error);
       return res.status(500).json({ error: 'Failed to fetch messages' });
     }
-    
+
     console.log(`✅ Found ${messages?.length || 0} messages for session: ${sessionId}`);
-    
+
     res.json(messages || []);
   } catch (error) {
     console.error('❌ Error in messages endpoint:', error);
@@ -6548,7 +6572,7 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
 
       const frontendUrl = process.env.FRONTEND_URL || 'https://whatsappghl.vercel.app';
       const businessName = process.env.STRIPE_BUSINESS_NAME || 'Octendr';
-      
+
       const sessionConfig = {
         payment_method_types: ['card'],
         line_items: [{
@@ -6587,7 +6611,7 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
     }
 
     // Get price ID based on plan
-    const priceId = plan === 'starter' 
+    const priceId = plan === 'starter'
       ? STRIPE_STARTER_PRICE_ID
       : STRIPE_PROFESSIONAL_PRICE_ID;
 
@@ -6603,7 +6627,7 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
         .select('email')
         .eq('id', userId)
         .single();
-      
+
       if (userError) {
         console.error('Error fetching user email:', userError);
       } else if (user) {
@@ -6612,7 +6636,7 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
     }
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://whatsappghl.vercel.app';
-    
+
     // Get business name from environment (default to "Octendr" if not set)
     const businessName = process.env.STRIPE_BUSINESS_NAME || 'Octendr';
 
@@ -6623,19 +6647,19 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
       price = await stripe.prices.retrieve(priceId);
     } catch (priceError) {
       console.error('Error retrieving price from Stripe:', priceError);
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to retrieve price from Stripe',
-        details: priceError.message 
+        details: priceError.message
       });
     }
 
     const isRecurring = price.recurring !== null; // If recurring is not null, it's a subscription
     const mode = isRecurring ? 'subscription' : 'payment';
-    
+
     // Use custom URLs if provided, otherwise use defaults
     const finalSuccessUrl = successUrl || `${frontendUrl}/dashboard?subscription=success&session_id={CHECKOUT_SESSION_ID}`;
     const finalCancelUrl = cancelUrl || `${frontendUrl}/dashboard?subscription=cancelled`;
-    
+
     // Create checkout session
     const sessionConfig = {
       payment_method_types: ['card'],
@@ -6680,7 +6704,7 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
     res.json({ sessionId: session.id, url: session.url });
   } catch (error) {
     console.error('Stripe checkout error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to create checkout session',
       details: error.message
     });
@@ -6713,9 +6737,9 @@ app.post('/api/stripe/customer-portal', requireAuth, async (req, res) => {
     }
 
     if (!user.stripe_customer_id) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'No Stripe customer found',
-        details: 'You need to subscribe to a plan first before managing billing.' 
+        details: 'You need to subscribe to a plan first before managing billing.'
       });
     }
 
@@ -6727,7 +6751,7 @@ app.post('/api/stripe/customer-portal', requireAuth, async (req, res) => {
     try {
       const customer = await stripe.customers.retrieve(customer_id);
       if (customer.deleted) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'Customer has been deleted in Stripe',
           details: 'The Stripe customer associated with this account no longer exists.'
         });
@@ -6735,7 +6759,7 @@ app.post('/api/stripe/customer-portal', requireAuth, async (req, res) => {
     } catch (stripeError) {
       console.error('❌ Error retrieving Stripe customer:', stripeError);
       if (stripeError.code === 'resource_missing') {
-        return res.status(404).json({ 
+        return res.status(404).json({
           error: 'Stripe customer not found',
           details: 'The customer ID does not exist in Stripe. Please contact support.'
         });
@@ -6751,16 +6775,16 @@ app.post('/api/stripe/customer-portal', requireAuth, async (req, res) => {
 
     console.log(`✅ Customer portal session created for user ${userId}, customer ${customer_id}`);
 
-    res.json({ 
+    res.json({
       url: portalSession.url
     });
   } catch (error) {
     console.error('❌ Error creating customer portal session:', error);
-    
+
     // Provide more specific error messages
     let errorMessage = 'Failed to create customer portal session';
     let errorDetails = error.message;
-    
+
     if (error.type === 'StripeInvalidRequestError') {
       if (error.code === 'resource_missing') {
         errorMessage = 'Stripe customer not found';
@@ -6770,8 +6794,8 @@ app.post('/api/stripe/customer-portal', requireAuth, async (req, res) => {
         errorDetails = 'Please configure the Customer Portal in your Stripe Dashboard (Settings → Billing → Customer portal).';
       }
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: errorMessage,
       details: errorDetails,
       code: error.code || 'unknown_error'
@@ -6849,14 +6873,14 @@ app.post('/api/stripe/cancel-subscription', requireAuth, async (req, res) => {
 
     console.log(`✅ Subscription ${subscription_id} cancelled for user ${userId}. Access until period end.`);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Subscription cancelled successfully',
       access_until: new Date(subscription.current_period_end * 1000).toISOString()
     });
   } catch (error) {
     console.error('❌ Error cancelling subscription:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Failed to cancel subscription',
       details: error.message
     });
@@ -6918,7 +6942,7 @@ async function checkAndProcessExpiredSubscriptions() {
     const expiredUsers = [
       ...(expiredTrials || []),
       ...(expiredSubscriptions || [])
-    ].filter((user, index, self) => 
+    ].filter((user, index, self) =>
       index === self.findIndex(u => u.id === user.id)
     ); // Remove duplicates
 
@@ -6936,12 +6960,12 @@ async function checkAndProcessExpiredSubscriptions() {
 
     for (const user of expiredUsers) {
       try {
-        const isTrialExpired = (user.subscription_status === 'trial' || user.subscription_status === 'free') && 
-                                user.trial_ends_at && 
-                                new Date(user.trial_ends_at) <= nowDate;
-        const isSubscriptionExpired = user.subscription_status === 'cancelled' && 
-                                      user.subscription_ends_at && 
-                                      new Date(user.subscription_ends_at) <= nowDate;
+        const isTrialExpired = (user.subscription_status === 'trial' || user.subscription_status === 'free') &&
+          user.trial_ends_at &&
+          new Date(user.trial_ends_at) <= nowDate;
+        const isSubscriptionExpired = user.subscription_status === 'cancelled' &&
+          user.subscription_ends_at &&
+          new Date(user.subscription_ends_at) <= nowDate;
 
         console.log(`🔄 Processing expired ${isTrialExpired ? 'trial' : 'subscription'} for user: ${user.id} (${user.email})`);
 
@@ -6972,13 +6996,13 @@ async function checkAndProcessExpiredSubscriptions() {
                   const sessionName = `subaccount_${account.id}_${session.id}`;
                   await waManager.disconnectClient(sessionName);
                   waManager.clearSessionData(sessionName);
-                  
+
                   // Update session status to disconnected
                   await supabaseAdmin
                     .from('sessions')
                     .update({ status: 'disconnected' })
                     .eq('id', session.id);
-                  
+
                   console.log(`✅ Disconnected session ${session.id} for account ${account.id}`);
                 } catch (sessionError) {
                   console.error(`❌ Error disconnecting session ${session.id}:`, sessionError);
@@ -7152,7 +7176,7 @@ console.log('✅ Drip Queue Processor started');
 app.get('/api/stripe/invoices', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Get user's Stripe customer ID
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
@@ -7202,7 +7226,7 @@ app.get('/api/stripe/invoices', requireAuth, async (req, res) => {
 app.post('/api/subscription/sync', requireAuth, async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Get user's Stripe subscription ID
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
@@ -7215,16 +7239,16 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
     }
 
     if (user.is_manual_subscription) {
-      return res.json({ 
-        synced: false, 
-        message: 'Manual subscription - not synced with Stripe' 
+      return res.json({
+        synced: false,
+        message: 'Manual subscription - not synced with Stripe'
       });
     }
 
     if (!user.stripe_subscription_id || !stripe) {
-      return res.json({ 
-        synced: false, 
-        message: 'No Stripe subscription found or Stripe not configured' 
+      return res.json({
+        synced: false,
+        message: 'No Stripe subscription found or Stripe not configured'
       });
     }
 
@@ -7239,7 +7263,7 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
       .select('stripe_customer_id')
       .eq('id', userId)
       .single();
-    
+
     if (userData?.stripe_customer_id) {
       try {
         const openInvoices = await stripe.invoices.list({
@@ -7247,7 +7271,7 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
           status: 'open',
           limit: 1
         });
-        
+
         // If there's an open invoice, it means payment is pending, not cancelled
         if (openInvoices.data.length > 0 && stripeStatus === 'canceled' && !cancelAtPeriodEnd) {
           console.log(`📄 Found open invoice - marking as past_due instead of cancelled`);
@@ -7261,10 +7285,10 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
     // Determine plan from Stripe subscription items
     let planType = user.subscription_plan; // Default to existing plan
     let maxSubaccounts = 1; // Default to trial
-    
+
     if (stripeSubscription.items && stripeSubscription.items.data && stripeSubscription.items.data.length > 0) {
       const priceAmount = stripeSubscription.items.data[0].price.unit_amount;
-      
+
       // Determine plan based on price
       if (priceAmount === 1900) { // $19.00 = Starter
         planType = 'starter';
@@ -7273,7 +7297,7 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
         planType = 'professional';
         maxSubaccounts = 10;
       }
-      
+
       // Also check metadata if available
       if (stripeSubscription.items.data[0].price.metadata?.plan_type) {
         planType = stripeSubscription.items.data[0].price.metadata.plan_type;
@@ -7300,7 +7324,7 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
       if (stripeSubscription.current_period_end) {
         const periodEnd = new Date(stripeSubscription.current_period_end * 1000);
         const now = new Date();
-        
+
         // If period has ended, mark as expired
         if (periodEnd <= now) {
           newStatus = 'expired';
@@ -7331,15 +7355,15 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
     if (newStatus !== user.subscription_status) {
       statusUpdate.subscription_status = newStatus;
     }
-      
+
     if (stripeSubscription.current_period_end) {
       statusUpdate.subscription_ends_at = new Date(stripeSubscription.current_period_end * 1000).toISOString();
     }
 
     // Update if status changed OR if max_subaccounts needs to be corrected
-    const needsUpdate = Object.keys(statusUpdate).length > 0 || 
-                       (newStatus === 'active' && user.max_subaccounts !== maxSubaccounts) ||
-                       (planType && planType !== user.subscription_plan);
+    const needsUpdate = Object.keys(statusUpdate).length > 0 ||
+      (newStatus === 'active' && user.max_subaccounts !== maxSubaccounts) ||
+      (planType && planType !== user.subscription_plan);
 
     if (needsUpdate) {
       await supabaseAdmin
@@ -7361,8 +7385,8 @@ app.post('/api/subscription/sync', requireAuth, async (req, res) => {
       });
     }
 
-    return res.json({ 
-      synced: true, 
+    return res.json({
+      synced: true,
       status: newStatus,
       stripe_status: stripeStatus,
       message: newStatus !== user.subscription_status ? 'Subscription status updated' : 'Subscription status is up to date'
@@ -7382,7 +7406,7 @@ async function syncSubscriptionStatuses() {
 
   try {
     console.log('🔄 Syncing subscription statuses with Stripe...');
-    
+
     // Get all users with Stripe subscriptions
     const { data: users, error } = await supabaseAdmin
       .from('users')
@@ -7419,7 +7443,7 @@ async function syncSubscriptionStatuses() {
           .select('stripe_customer_id')
           .eq('id', user.id)
           .single();
-        
+
         if (userData?.stripe_customer_id) {
           try {
             const openInvoices = await stripe.invoices.list({
@@ -7427,7 +7451,7 @@ async function syncSubscriptionStatuses() {
               status: 'open',
               limit: 1
             });
-            
+
             // If there's an open invoice, it means payment is pending, not cancelled
             if (openInvoices.data.length > 0 && stripeStatus === 'canceled' && !cancelAtPeriodEnd) {
               stripeStatus = 'past_due'; // Override to past_due if invoice is pending
@@ -7440,10 +7464,10 @@ async function syncSubscriptionStatuses() {
         // Determine plan from Stripe subscription items
         let planType = user.subscription_plan; // Default to existing plan
         let maxSubaccounts = 1; // Default to trial
-        
+
         if (stripeSubscription.items && stripeSubscription.items.data && stripeSubscription.items.data.length > 0) {
           const priceAmount = stripeSubscription.items.data[0].price.unit_amount;
-          
+
           // Determine plan based on price (adjust these amounts based on your actual Stripe prices)
           if (priceAmount === 1900) { // $19.00 = Starter
             planType = 'starter';
@@ -7452,7 +7476,7 @@ async function syncSubscriptionStatuses() {
             planType = 'professional';
             maxSubaccounts = 10;
           }
-          
+
           // Also check metadata if available
           if (stripeSubscription.items.data[0].price.metadata?.plan_type) {
             planType = stripeSubscription.items.data[0].price.metadata.plan_type;
@@ -7480,7 +7504,7 @@ async function syncSubscriptionStatuses() {
           if (stripeSubscription.current_period_end) {
             const periodEnd = new Date(stripeSubscription.current_period_end * 1000);
             const now = new Date();
-            
+
             // If period has ended, mark as expired
             if (periodEnd <= now) {
               newStatus = 'expired';
@@ -7517,9 +7541,9 @@ async function syncSubscriptionStatuses() {
         }
 
         // Update if status changed OR if max_subaccounts needs to be corrected
-        const needsUpdate = newStatus !== user.subscription_status || 
-                           (newStatus === 'active' && user.max_subaccounts !== maxSubaccounts) ||
-                           (planType && planType !== user.subscription_plan);
+        const needsUpdate = newStatus !== user.subscription_status ||
+          (newStatus === 'active' && user.max_subaccounts !== maxSubaccounts) ||
+          (planType && planType !== user.subscription_plan);
 
         if (needsUpdate) {
           if (newStatus !== user.subscription_status) {
@@ -7605,12 +7629,12 @@ setInterval(() => {
         }
       }
     }
-    
+
     // Clean recent messages set if it gets too large (prevent memory leak)
     if (global.recentMessages && global.recentMessages.size > 10000) {
       global.recentMessages.clear();
     }
-    
+
     // Clean recent inbound messages set if it gets too large
     if (global.recentInboundMessages && global.recentInboundMessages.size > 10000) {
       global.recentInboundMessages.clear();
@@ -7636,7 +7660,7 @@ process.on('uncaughtException', (error) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`GHL OAuth URL: https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}`);
-  
+
   if (!process.env.JWT_SECRET) {
     console.error('❌ FATAL: JWT_SECRET not set — authentication will fail!');
   }

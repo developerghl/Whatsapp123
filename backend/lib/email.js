@@ -1330,6 +1330,240 @@ This is an automated notification from Octendr.
       return { success: false, error: error.message };
     }
   }
+
+  /**
+   * Send internal notification to admin when a user makes a payment
+   * @param {object} paymentData - Payment details
+   * @param {string} paymentData.userId - User ID
+   * @param {string} paymentData.userEmail - User email
+   * @param {string} paymentData.userName - User name
+   * @param {string} paymentData.planName - Plan name (starter, professional)
+   * @param {string} paymentData.paymentType - Payment type (recurring, one-time)
+   * @param {string} paymentData.stripeSessionId - Stripe session ID
+   * @param {string} paymentData.stripeCustomerId - Stripe customer ID
+   */
+  async sendInternalPaymentNotification(paymentData) {
+    try {
+      const adminEmail = process.env.ADMIN_NOTIFY_EMAIL || process.env.SMTP_USER;
+      
+      if (!adminEmail) {
+        console.log('⚠️ No admin email configured for internal notifications (set ADMIN_NOTIFY_EMAIL or SMTP_USER)');
+        return { success: false, error: 'No admin email configured' };
+      }
+
+      const {
+        userId,
+        userEmail,
+        userName,
+        planName,
+        paymentType,
+        stripeSessionId,
+        stripeCustomerId
+      } = paymentData;
+
+      const planDisplayName = planName === 'starter' ? 'Starter Plan ($19/mo)' : planName === 'professional' ? 'Professional Plan ($49/mo)' : planName;
+      const planPrice = planName === 'starter' ? '$19' : planName === 'professional' ? '$49' : 'N/A';
+      const maxSubs = planName === 'starter' ? 2 : planName === 'professional' ? 10 : 1;
+      const now = new Date().toLocaleString('en-US', { timeZone: 'Asia/Karachi', dateStyle: 'medium', timeStyle: 'short' });
+
+      console.log(`📧 Sending internal payment notification to admin: ${adminEmail}`);
+
+      const subject = `💰 New Payment! ${userName || userEmail} → ${planDisplayName}`;
+      
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>New Payment Notification</title>
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                background-color: #f5f5f5;
+                margin: 0;
+                padding: 0;
+              }
+              .container {
+                max-width: 600px;
+                margin: 0 auto;
+                background-color: #ffffff;
+                padding: 0;
+              }
+              .header {
+                background: linear-gradient(135deg, #1B5E20 0%, #4CAF50 100%);
+                padding: 30px;
+                text-align: center;
+                color: white;
+              }
+              .header h1 {
+                margin: 0;
+                font-size: 24px;
+                font-weight: 700;
+              }
+              .header p {
+                margin: 8px 0 0;
+                font-size: 14px;
+                opacity: 0.9;
+              }
+              .content {
+                padding: 30px;
+              }
+              .payment-badge {
+                background: #E8F5E9;
+                border: 2px solid #4CAF50;
+                border-radius: 12px;
+                padding: 20px;
+                text-align: center;
+                margin: 20px 0;
+              }
+              .payment-badge .amount {
+                font-size: 36px;
+                font-weight: 700;
+                color: #2E7D32;
+                margin: 0;
+              }
+              .payment-badge .label {
+                font-size: 14px;
+                color: #666;
+                margin: 5px 0 0;
+              }
+              .info-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+              }
+              .info-table td {
+                padding: 12px 15px;
+                border-bottom: 1px solid #E9EDEF;
+              }
+              .info-table td:first-child {
+                font-weight: 600;
+                color: #555;
+                width: 40%;
+              }
+              .info-table td:last-child {
+                color: #333;
+              }
+              .plan-badge {
+                display: inline-block;
+                padding: 4px 12px;
+                border-radius: 20px;
+                font-weight: 600;
+                font-size: 13px;
+              }
+              .plan-starter {
+                background: #E3F2FD;
+                color: #1565C0;
+              }
+              .plan-professional {
+                background: #F3E5F5;
+                color: #7B1FA2;
+              }
+              .footer {
+                background: #F0F2F5;
+                padding: 15px;
+                text-align: center;
+                color: #999;
+                font-size: 12px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>💰 New Payment Received!</h1>
+                <p>${now}</p>
+              </div>
+              
+              <div class="content">
+                <div class="payment-badge">
+                  <p class="amount">${planPrice}/mo</p>
+                  <p class="label">${paymentType === 'one-time' ? 'One-Time Payment' : 'Recurring Subscription'}</p>
+                </div>
+                
+                <table class="info-table">
+                  <tr>
+                    <td>👤 User</td>
+                    <td>${userName || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td>📧 Email</td>
+                    <td>${userEmail || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td>📋 Plan</td>
+                    <td><span class="plan-badge ${planName === 'starter' ? 'plan-starter' : 'plan-professional'}">${planDisplayName}</span></td>
+                  </tr>
+                  <tr>
+                    <td>💳 Payment Type</td>
+                    <td>${paymentType === 'one-time' ? 'One-Time' : 'Recurring'}</td>
+                  </tr>
+                  <tr>
+                    <td>📊 Max Subaccounts</td>
+                    <td>${maxSubs}</td>
+                  </tr>
+                  <tr>
+                    <td>🆔 User ID</td>
+                    <td style="font-size: 12px; font-family: monospace;">${userId || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td>🔗 Stripe Customer</td>
+                    <td style="font-size: 12px; font-family: monospace;">${stripeCustomerId || 'N/A'}</td>
+                  </tr>
+                  <tr>
+                    <td>📝 Session ID</td>
+                    <td style="font-size: 12px; font-family: monospace;">${stripeSessionId || 'N/A'}</td>
+                  </tr>
+                </table>
+              </div>
+              
+              <div class="footer">
+                <p>Internal notification — Octendr Admin</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+
+      const textContent = `
+💰 New Payment Received!
+${now}
+
+User: ${userName || 'N/A'}
+Email: ${userEmail || 'N/A'}
+Plan: ${planDisplayName}
+Payment Type: ${paymentType === 'one-time' ? 'One-Time' : 'Recurring'}  
+Max Subaccounts: ${maxSubs}
+User ID: ${userId || 'N/A'}
+Stripe Customer: ${stripeCustomerId || 'N/A'}
+Session ID: ${stripeSessionId || 'N/A'}
+
+— Octendr Admin Notification
+      `;
+
+      const emailResult = await this.sendEmailViaAPI({
+        to: adminEmail,
+        subject: subject,
+        html: htmlContent,
+        text: textContent
+      });
+
+      if (emailResult.success) {
+        console.log(`✅ Internal payment notification sent to admin: ${adminEmail}`);
+        return { success: true, email: adminEmail };
+      } else {
+        console.error(`❌ Failed to send internal payment notification:`, emailResult.error);
+        return { success: false, error: emailResult.error };
+      }
+
+    } catch (error) {
+      console.error('❌ Error sending internal payment notification:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 module.exports = new EmailService();
