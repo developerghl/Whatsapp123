@@ -3339,6 +3339,26 @@ app.post('/ghl/provider/webhook', async (req, res) => {
             console.error(`❌ Error sending error message to GHL:`, errorMsgError.message);
           }
 
+          // Auto-tag contact as non-whatsapp in GHL
+          try {
+            if (contactId && validToken) {
+              await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/tags`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${validToken}`,
+                  'Content-Type': 'application/json',
+                  'Version': '2021-07-28'
+                },
+                body: JSON.stringify({
+                  tags: ['non-whatsapp']
+                })
+              });
+              console.log(`🏷️ Tagged contact ${contactId} as non-whatsapp`);
+            }
+          } catch (tagError) {
+            console.error('❌ Failed to tag contact:', tagError);
+          }
+
           throw sendError;
         }
       }
@@ -3573,7 +3593,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
       let finalMessage = message || "—";
 
       // If this is a media message, process and upload to GHL
-      if (mediaUrl && (messageType === 'image' || messageType === 'voice' || messageType === 'video' || messageType === 'audio')) {
+      if (mediaUrl && (messageType === 'image' || messageType === 'voice' || messageType === 'video' || messageType === 'audio' || messageType === 'document' || messageType === 'sticker')) {
         console.log(`📎 Processing media message: ${messageType}`);
 
         try {
@@ -3650,12 +3670,23 @@ app.post('/whatsapp/webhook', async (req, res) => {
             }
           } else {
             // Regular URL download
-            const response = await fetch(mediaUrl);
-            if (response.ok) {
+            try {
+              // Try Baileys downloadMediaMessage first (handles encrypted WhatsApp URLs)
+              if (mediaMessage) {
+                mediaBuffer = await downloadMediaMessage(mediaMessage, 'buffer', {}, {
+                  logger: console,
+                  reuploadRequest: waManager.getClient(sessionId)?.updateMediaMessage
+                });
+              }
+              if (!mediaBuffer || mediaBuffer.length === 0) {
+                // Fallback to direct fetch
+                const response = await fetch(mediaUrl);
+                mediaBuffer = Buffer.from(await response.arrayBuffer());
+              }
+            } catch (dlErr) {
+              console.error('❌ Media download failed, trying direct fetch:', dlErr);
+              const response = await fetch(mediaUrl);
               mediaBuffer = Buffer.from(await response.arrayBuffer());
-              console.log(`✅ Downloaded ${mediaBuffer.length} bytes`);
-            } else {
-              throw new Error('Failed to download media');
             }
           }
 
