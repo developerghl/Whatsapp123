@@ -50,79 +50,46 @@ async function downloadWhatsAppMedia(mediaUrl) {
  * @param {string} locationId - GHL location ID
  * @returns {Promise<string>} - GHL media URL
  */
-async function uploadMediaToGHL(mediaBuffer, messageType, contactId, accessToken, locationId) {
+async function uploadMediaToGHL(mediaBuffer, messageType, contactId, accessToken, locationId, conversationId) {
   try {
     console.log(`📤 Uploading ${messageType} to GHL for location: ${locationId}...`);
-    
-    // Determine file extension and content type
-    const fileMap = {
-      'image': { ext: 'jpg', mime: 'image/jpeg' },
-      'voice': { ext: 'ogg', mime: 'audio/ogg; codecs=opus' },
-      'audio': { ext: 'mp3', mime: 'audio/mpeg' },
-      'video': { ext: 'mp4', mime: 'video/mp4' },
-      'document': { ext: 'pdf', mime: 'application/pdf' }
-    };
-    
-    const fileInfo = fileMap[messageType] || { ext: 'bin', mime: 'application/octet-stream' };
-    const filename = `whatsapp_${messageType}_${Date.now()}.${fileInfo.ext}`;
-    
-    // Upload media to GHL media library with correct endpoint
-    const mediaFormData = new FormData();
-    mediaFormData.append('file', mediaBuffer, {
-      filename: filename,
-      contentType: fileInfo.mime
+
+    // Step 1: Upload to GHL conversation attachment endpoint
+    const form = new FormData();
+    form.append('fileAttachment', mediaBuffer, {
+      filename: `media_${Date.now()}.${messageType === 'image' ? 'jpg' : 
+                 messageType === 'video' ? 'mp4' : 
+                 messageType === 'audio' ? 'mp3' : 'pdf'}`,
+      contentType: messageType === 'image' ? 'image/jpeg' : 
+                   messageType === 'video' ? 'video/mp4' : 
+                   messageType === 'audio' ? 'audio/mp3' : 'application/pdf'
     });
-    mediaFormData.append('fileType', messageType);
-    
-    console.log('📤 Uploading media to GHL media library...');
-    
-    // Try media upload endpoint (requires medias.write scope)
-    // If fails, will use direct URL method as fallback
-    const mediaResponse = await axios.post(
-      `https://services.leadconnectorhq.com/medias/upload-file`,
-      mediaFormData,
+    form.append('conversationId', conversationId);
+
+    const uploadResponse = await fetch(
+      'https://services.leadconnectorhq.com/conversations/messages/upload',
       {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Version': '2021-07-28',
-          'locationId': locationId,
-          ...mediaFormData.getHeaders()
+          ...form.getHeaders()
         },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        timeout: 60000
+        body: form
       }
-    ).catch(err => {
-      console.warn('⚠️ Media upload endpoint failed, using conversations API fallback');
-      throw err; // Will trigger fallback in server.js
-    });
-    
-    console.log('✅ Media uploaded to library:', mediaResponse.data);
-    
-    // Get the uploaded file URL
-    const uploadedFileUrl = mediaResponse.data?.fileUrl || mediaResponse.data?.url;
-    
-    if (!uploadedFileUrl) {
-      throw new Error('No file URL returned from GHL media upload');
-    }
-    
-    console.log('📊 Media URL extracted:', uploadedFileUrl);
-    
-    // Return ONLY the URL - DO NOT create conversation message here
-    // The conversation message will be created in server.js with the URL
-    return {
-      url: uploadedFileUrl,
-      fileId: mediaResponse.data?.fileId,
-      success: true
-    };
-    
+    );
+
+    const uploadData = await uploadResponse.json();
+    console.log('📎 GHL attachment upload response:', uploadData);
+
+    // Step 2: Return the URL
+    const attachmentUrl = uploadData.uploadedFiles?.[0] || uploadData.urls?.[0];
+    return { url: attachmentUrl, success: true };
+
   } catch (error) {
     console.error('❌ GHL media upload failed:');
-    console.error('Status:', error.response?.status);
-    console.error('Data:', error.response?.data);
-    console.error('Headers:', error.response?.headers);
     console.error('Message:', error.message);
-    throw new Error(`GHL upload failed: ${error.response?.data?.message || error.message}`);
+    throw new Error(`GHL upload failed: ${error.message}`);
   }
 }
 

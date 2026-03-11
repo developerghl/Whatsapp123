@@ -3289,6 +3289,26 @@ app.post('/ghl/provider/webhook', async (req, res) => {
               console.error(`❌ Error sending error message to GHL:`, errorMsgError.message);
             }
 
+            // Auto-tag contact as non-whatsapp in GHL
+            if (sendResult.reason === 'Number does not have WhatsApp') {
+              try {
+                await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/tags`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${validToken}`,
+                    'Content-Type': 'application/json',
+                    'Version': '2021-07-28'
+                  },
+                  body: JSON.stringify({
+                    tags: ['non-whatsapp']
+                  })
+                });
+                console.log(`🏷️ Tagged contact ${contactId} as non-whatsapp`);
+              } catch (tagError) {
+                console.error('❌ Failed to tag contact:', tagError);
+              }
+            }
+
             return res.json({
               status: 'warning',
               reason: sendResult.reason,
@@ -3698,7 +3718,8 @@ app.post('/whatsapp/webhook', async (req, res) => {
               messageType,
               contactId,
               validToken,
-              locationId
+              locationId,
+              conversationId
             );
 
             console.log(`✅ Media uploaded to GHL successfully:`, ghlResponse);
@@ -3709,7 +3730,12 @@ app.post('/whatsapp/webhook', async (req, res) => {
             // Change 1: Send media as attachment, not as text message
             // Use a descriptive message and put URL in attachments array
             finalMessage = `🖼️ ${getMediaMessageText(messageType)}`;
-            attachments.push(accessibleUrl);
+            attachments.push({
+              type: messageType === 'image' ? 'image' : 
+                    messageType === 'video' ? 'video' : 'file',
+              url: accessibleUrl,
+              filename: `${messageType}_${Date.now()}.${messageType === 'image' ? 'jpg' : messageType === 'video' ? 'mp4' : 'bin'}`,
+            });
 
             console.log(`📤 Sending ${messageType} as attachment: ${accessibleUrl}`);
 
@@ -3728,7 +3754,12 @@ app.post('/whatsapp/webhook', async (req, res) => {
                 direction: "inbound",
                 status: "delivered",
                 altId: whatsappMsgId,
-                attachments: [mediaUrl]  // Send URL directly as attachment
+                attachments: [{
+                  type: messageType === 'image' ? 'image' : 
+                        messageType === 'video' ? 'video' : 'file',
+                  url: mediaUrl,
+                  filename: `${messageType}_${Date.now()}.jpg`,
+                }]  // Send URL directly as attachment
               };
 
               const inboundRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
