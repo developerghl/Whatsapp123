@@ -3512,6 +3512,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
 
     // Upsert contact (same location) - only if setting allows
     let contactId = null;
+    let conversationId = null;
 
     if (settings.create_contact_in_ghl) {
       // Setting is ON - create/upsert contact
