@@ -3541,7 +3541,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
     // Handle outbound messages (sent from phone) - sync to GHL conversation
     if (req.body.fromMe === true) {
       console.log(`📤 Outbound from phone to: ${phone}`);
-    
+      
       // ✅ Loop prevention — same message dobara process mat karo
       const outAltId = req.body.whatsappMsgId || `wa_out_${Date.now()}`;
       if (!global.outboundSyncCache) global.outboundSyncCache = new Map();
@@ -3550,7 +3550,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
       }
       global.outboundSyncCache.set(outAltId, Date.now());
       setTimeout(() => global.outboundSyncCache.delete(outAltId), 5 * 60 * 1000);
-    
+      
       // Contact dhundo
       try {
         const listRes = await makeGHLRequest(
@@ -3564,7 +3564,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
             }
           }, ghlAccount
         );
-    
+      
         let outContactId = null;
         if (listRes.ok) {
           const listData = await listRes.json();
@@ -3576,18 +3576,52 @@ app.post('/whatsapp/webhook', async (req, res) => {
           );
           if (match) outContactId = match.id;
         }
-    
+      
+        // ✅ AGAR CONTACT NA MILE TOH SETTING CHECK KARO AUR CREATE KARO
         if (!outContactId) {
-          console.log(`⏭️ Contact not found for outbound: ${phone}`);
-          return res.json({ status: 'success', reason: 'contact_not_found' });
+          if (settings.create_contact_in_ghl) {
+            console.log(`🆕 Contact not found for outbound. Setting is ON. Creating new contact: ${phone}`);
+            
+            try {
+              const contactRes = await makeGHLRequest(`${BASE}/contacts/`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${validToken}`,
+                  Version: "2021-07-28",
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                  phone: phone,
+                  name: phone, // Default name number hi rakh do
+                  locationId: locationId
+                })
+              }, ghlAccount);
+
+              if (contactRes.ok) {
+                const contactData = await contactRes.json();
+                outContactId = contactData.contact?.id;
+                console.log(`✅ New contact created for outbound message: ${outContactId}`);
+              } else {
+                console.log(`❌ Failed to create contact for outbound message`);
+                return res.json({ status: 'success', reason: 'contact_creation_failed' });
+              }
+            } catch(e) {
+                console.error(`❌ Error creating contact:`, e.message);
+                return res.json({ status: 'success', reason: 'contact_creation_error' });
+            }
+          } else {
+            // Setting OFF hai, toh skip kar do (Exactly like Inbound)
+            console.log(`⏭️ Contact not found for outbound and creation is DISABLED: ${phone}`);
+            return res.json({ status: 'success', reason: 'contact_not_found_creation_disabled' });
+          }
         }
-    
+      
         // ✅ GHL mein outbound direction se add karo
         const payload = {
           type: "SMS",
           conversationProviderId: providerId,
           contactId: outContactId,
-          message: message,        // clean message — koi prefix nahi
+          message: message,        // clean message
           direction: "outbound",   // ← outbound
           status: "delivered",
           altId: outAltId          // ← unique ID — loop rokta hai
@@ -3600,11 +3634,11 @@ app.post('/whatsapp/webhook', async (req, res) => {
             Version: "2021-07-28",
             "Content-Type": "application/json"
           },
-          body: JSON.stringify(outboundPayload)
+          body: JSON.stringify(payload) // ✅ FIX: 'outboundPayload' ki jagah sirf 'payload'
         }, ghlAccount);
 
         if (outboundRes.ok) {
-          console.log(`✅ Outbound message synced to GHL for contact: ${outboundContactId}`);
+          console.log(`✅ Outbound message synced to GHL for contact: ${outContactId}`);
         } else {
           const errText = await outboundRes.text();
           console.error(`❌ Failed to sync outbound message:`, errText);

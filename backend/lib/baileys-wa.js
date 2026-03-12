@@ -364,7 +364,7 @@ class BaileysWhatsAppManager {
             conversation: 'Hello from Octendr!'
           };
         },
-        shouldSyncHistoryMessage: () => false,
+        shouldSyncHistoryMessage: () => true,
         shouldIgnoreJid: () => false,
         fireInitQueries: true,
         emitOwnEvents: false
@@ -895,16 +895,6 @@ class BaileysWhatsAppManager {
           
           const msg = m.messages[0];
           let from = msg.key.remoteJid;
-          
-          // 🚨 NAYA DEBUG BLOCK START: Har fromMe message ka RAW data yahan print hoga
-          if (msg.key.fromMe && from.includes('@lid') && !msg.message?.protocolMessage) {
-            console.log(`\n\n=== 🚨 OUTBOUND LID MESSAGE DETECTED 🚨 ===`);
-            console.log(`To: ${from}`);
-            console.log(`Raw Payload:`);
-            console.log(JSON.stringify(msg, null, 2));
-            console.log(`===========================================\n\n`);
-          }
-          // 🚨 DEBUG BLOCK END
           
           // Check if message has senderPn (real sender for newsletter/community messages)
           const actualSender = msg.key.senderPn || msg.key.participant || from;
