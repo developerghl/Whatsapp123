@@ -84,6 +84,11 @@ async function refreshGHLToken(ghlAccount) {
     formData.append('refresh_token', ghlAccount.refresh_token);
     formData.append('client_id', GHL_CLIENT_ID);
     formData.append('client_secret', GHL_CLIENT_SECRET);
+    if (ghlAccount.location_id) {
+      formData.append('userType', 'Location');
+    } else if (ghlAccount.company_id) {
+      formData.append('userType', 'Company');
+    }
 
     const response = await fetch('https://services.leadconnectorhq.com/oauth/token', {
       method: 'POST',
@@ -280,11 +285,15 @@ setInterval(async () => {
       try {
         // Check if token expires within 8 hours
         const now = new Date();
-        const expiresAt = new Date(account.token_expires_at);
+        const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : new Date(0);
         const eightHoursFromNow = new Date(now.getTime() + (8 * 60 * 60 * 1000));
 
         if (expiresAt <= eightHoursFromNow) {
-          console.log(`🔄 Aggressive refresh for account ${account.id} (expires in ${Math.round((expiresAt - now) / (60 * 60 * 1000))} hours)`);
+          if (account.token_expires_at) {
+            console.log(`🔄 Aggressive refresh for account ${account.id} (expires in ${Math.round((expiresAt - now) / (60 * 60 * 1000))} hours)`);
+          } else {
+            console.log(`🔄 Aggressive refresh for account ${account.id} (no expiration date found, forcing refresh)`);
+          }
           await refreshGHLToken(account);
         }
       } catch (error) {
@@ -3808,12 +3817,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
             // Change 1: Send media as attachment, not as text message
             // Use a descriptive message and put URL in attachments array
             finalMessage = `🖼️ ${getMediaMessageText(messageType)}`;
-            attachments.push({
-              type: messageType === 'image' ? 'image' : 
-                    messageType === 'video' ? 'video' : 'file',
-              url: accessibleUrl,
-              filename: `${messageType}_${Date.now()}.${messageType === 'image' ? 'jpg' : messageType === 'video' ? 'mp4' : 'bin'}`,
-            });
+            attachments.push(accessibleUrl);
 
             console.log(`📤 Sending ${messageType} as attachment: ${accessibleUrl}`);
 
@@ -3832,12 +3836,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
                 direction: "inbound",
                 status: "delivered",
                 altId: whatsappMsgId,
-                attachments: [{
-                  type: messageType === 'image' ? 'image' : 
-                        messageType === 'video' ? 'video' : 'file',
-                  url: mediaUrl,
-                  filename: `${messageType}_${Date.now()}.jpg`,
-                }]  // Send URL directly as attachment
+                attachments: [mediaUrl]  // Send URL directly as attachment
               };
 
               const inboundRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {

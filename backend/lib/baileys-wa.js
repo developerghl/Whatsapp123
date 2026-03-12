@@ -844,6 +844,65 @@ class BaileysWhatsAppManager {
             console.log(`🚫 Ignoring protocol/system message from: ${from}`);
             return;
           }
+
+          // ✅ Handle outbound messages BEFORE @lid filter
+          if (msg.key.fromMe) {
+            // Get actual recipient JID - resolve @lid to real number
+            let recipientJid = from;
+            
+            // If @lid, try to get real number from message store or participant
+            if (from.includes('@lid')) {
+              console.log(`📤 Outbound to @lid detected, skipping GHL sync (no real number available)`);
+              // TODO: In future, maintain lid->phone mapping to resolve these
+              return;
+            }
+
+            console.log(`📤 Outbound message detected (fromMe = true) to: ${from}`);
+            
+            let outboundText = '';
+            if (msg.message?.conversation) {
+              outboundText = msg.message.conversation;
+            } else if (msg.message?.extendedTextMessage?.text) {
+              outboundText = msg.message.extendedTextMessage.text;
+            } else if (msg.message?.imageMessage) {
+              outboundText = msg.message.imageMessage.caption || '🖼️ Image sent';
+            } else if (msg.message?.videoMessage) {
+              outboundText = msg.message.videoMessage.caption || '🎥 Video sent';
+            } else if (msg.message?.audioMessage) {
+              outboundText = '🎵 Voice note sent';
+            } else if (msg.message?.documentMessage) {
+              outboundText = msg.message.documentMessage.fileName || '📄 Document sent';
+            } else {
+              outboundText = '📎 Media sent';
+            }
+
+            if (!outboundText) return;
+
+            try {
+              const webhookUrl = `${process.env.BACKEND_URL || 'https://api.octendr.com'}/whatsapp/webhook`;
+              fetch(webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  from,
+                  message: outboundText,
+                  messageType: 'text',
+                  timestamp: msg.messageTimestamp,
+                  sessionId,
+                  whatsappMsgId: msg.key.id,
+                  fromMe: true
+                })
+              }).then(() => {
+                console.log(`✅ Outbound message synced to webhook: ${outboundText.substring(0, 50)}`);
+              }).catch(err => {
+                console.error(`❌ Failed to sync outbound message:`, err.message);
+              });
+            } catch (err) {
+              console.error(`❌ Failed to sync outbound message:`, err.message);
+            }
+            return;
+          }
+          
           
           // If message is from newsletter/list but has real senderPn, use that instead
           if (from && from.includes('@lid') && actualSender && !actualSender.includes('@lid')) {
@@ -867,59 +926,6 @@ class BaileysWhatsAppManager {
           }
           
           console.log(`📨 Message received from ${from}, timestamp: ${msg.messageTimestamp}, type: ${m.type}`);
-          
-          // Handle outbound messages (sent from phone) - sync to GHL
-          if (msg.key.fromMe) {
-            console.log(`📤 Outbound message detected (fromMe = true) to: ${from}`);
-            
-            // Detect message content
-            let outboundText = '';
-            if (msg.message?.conversation) {
-              outboundText = msg.message.conversation;
-            } else if (msg.message?.extendedTextMessage?.text) {
-              outboundText = msg.message.extendedTextMessage.text;
-            } else if (msg.message?.imageMessage) {
-              outboundText = msg.message.imageMessage.caption || '🖼️ Image sent';
-            } else if (msg.message?.videoMessage) {
-              outboundText = msg.message.videoMessage.caption || '🎥 Video sent';
-            } else if (msg.message?.audioMessage) {
-              outboundText = '🎵 Voice note sent';
-            } else if (msg.message?.documentMessage) {
-              outboundText = msg.message.documentMessage.fileName || '📄 Document sent';
-            } else {
-              outboundText = '📎 Media sent';
-            }
-
-            // Skip empty or protocol messages
-            if (!outboundText || msg.message?.protocolMessage) {
-              return;
-            }
-
-            // Forward to webhook with fromMe flag
-            try {
-              const webhookUrl = `${process.env.BACKEND_URL || 'https://api.octendr.com'}/whatsapp/webhook`;
-              fetch(webhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  from,
-                  message: outboundText,
-                  messageType: 'text',
-                  timestamp: msg.messageTimestamp,
-                  sessionId,
-                  whatsappMsgId: msg.key.id,
-                  fromMe: true  // Flag for outbound sync
-                })
-              }).then(() => {
-                console.log(`✅ Outbound message synced to webhook: ${outboundText.substring(0, 50)}`);
-              }).catch(err => {
-                console.error(`❌ Failed to sync outbound message:`, err.message);
-              });
-            } catch (err) {
-              console.error(`❌ Failed to sync outbound message:`, err.message);
-            }
-            return;
-          }
           
           // Filter: Only process 'notify' type messages (incoming messages)
           if (m.type !== 'notify') {
