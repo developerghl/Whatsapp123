@@ -2897,6 +2897,12 @@ app.post('/ghl/provider/webhook', async (req, res) => {
       return res.json({ status: 'success', reason: 'error_notification_skip' });
     }
 
+    // ✅ Loop prevention — Another device wale message ko wapas WhatsApp par nahi bhejna
+    if (messageText && messageText.includes('📱 *Sent from another device:*')) {
+      console.log('⏭️ Skipping external-device message echo from GHL (Loop Broken!)');
+      return res.json({ status: 'success', reason: 'external_device_echo_skip' });
+    }
+
     // ✅ Loop prevention — phone se bheja gaya outbound ignore karo
     const incomingAltId = req.body.altId || req.body.messageId || '';
     if (incomingAltId.startsWith('wa_out_')) {
@@ -3451,11 +3457,15 @@ function getProviderId() {
 // WhatsApp message receiver webhook (for incoming WhatsApp messages)
 app.post('/whatsapp/webhook', async (req, res) => {
   try {
-    const { from, message, messageType = 'text', mediaUrl, mediaMessage, timestamp: messageTimestamp, sessionId, whatsappMsgId } = req.body;
+    // ✅ FIX 1: 'const' ki jagah 'let' use karein taake hum 'from' ko modify kar sakein
+    let { from, message, messageType = 'text', mediaUrl, mediaMessage, timestamp: messageTimestamp, sessionId, whatsappMsgId } = req.body;
 
     if (!from) {
       return res.json({ status: 'success' });
     }
+
+    // ✅ FIX 2: Jo bhi data aaye, usko zabardasti String (Text) bana do taake crash na ho
+    from = String(from);
 
     // Allow empty message for media messages
     if (!message && !mediaUrl && !mediaMessage) {
@@ -3616,12 +3626,15 @@ app.post('/whatsapp/webhook', async (req, res) => {
           }
         }
       
+        // ✅ Message ke sath tag lagayein taake GHL mein pata chale aur loop na bane
+        const formattedMessage = `📱 *Sent from another device:*\n${message}`;
+
         // ✅ GHL mein outbound direction se add karo
         const payload = {
           type: "SMS",
           conversationProviderId: providerId,
           contactId: outContactId,
-          message: message,        // clean message
+          message: formattedMessage,  // ✅ Naya tag yahan jayega
           direction: "outbound",   // ← outbound
           status: "delivered",
           altId: outAltId          // ← unique ID — loop rokta hai

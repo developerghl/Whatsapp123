@@ -438,7 +438,7 @@ class BaileysWhatsAppManager {
             contactsMap.set(contact.lid, contact.id);
             contactsMap.set(contact.id, contact.lid); // Reverse mapping too
             changed = true;
-            console.log(`📇 Contact mapped: ${contact.lid} <-> ${contact.id}`);
+            // console.log(`📇 Contact mapped: ${contact.lid} <-> ${contact.id}`);
           }
         }
         if (changed) saveContactsMap();
@@ -463,10 +463,20 @@ class BaileysWhatsAppManager {
         for (const chat of chats) {
            // Agar chat kisi @lid se hai aur uska real participant mojood hai
            if (chat.id && chat.id.includes('@lid') && (chat.participant || chat.remoteJidAlt)) {
-               const realNumber = chat.participant || chat.remoteJidAlt;
-               contactsMap.set(chat.id, realNumber);
-               contactsMap.set(realNumber, chat.id);
-               changed = true;
+               let realNumber = chat.participant || chat.remoteJidAlt;
+               
+               // Defensive extraction if participant is an array
+               if (Array.isArray(realNumber)) {
+                 realNumber = realNumber.length > 0 ? (realNumber[0]?.id || realNumber[0]) : null;
+               } else if (typeof realNumber === 'object' && realNumber !== null) {
+                 realNumber = realNumber.id || realNumber.jid || null;
+               }
+
+               if (realNumber && typeof realNumber === 'string') {
+                 contactsMap.set(chat.id, realNumber);
+                 contactsMap.set(realNumber, chat.id);
+                 changed = true;
+               }
            }
         }
         
@@ -928,9 +938,18 @@ class BaileysWhatsAppManager {
             // If @lid, try to get real number from message store or participant
             if (from.includes('@lid')) {
               const currentClient = this.clients.get(sessionId);
-              const resolvedJid = currentClient?.contactsMap?.get(from);
+              const rawResolved = currentClient?.contactsMap?.get(from);
               
-              if (resolvedJid) {
+              let resolvedJid = null;
+              if (Array.isArray(rawResolved)) {
+                resolvedJid = rawResolved.length > 0 ? (rawResolved[0]?.id || rawResolved[0]) : null;
+              } else if (rawResolved && typeof rawResolved === 'object') {
+                resolvedJid = rawResolved.id || rawResolved.jid || null;
+              } else {
+                resolvedJid = rawResolved;
+              }
+              
+              if (resolvedJid && typeof resolvedJid === 'string' && resolvedJid.trim() !== '') {
                 console.log(`✅ Resolved @lid ${from} → ${resolvedJid}`);
                 from = resolvedJid;  // Real number use karo
               } else {
