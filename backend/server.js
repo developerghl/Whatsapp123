@@ -17,7 +17,7 @@ const cookieParser = require('cookie-parser');
 const { createClient } = require('@supabase/supabase-js');
 const GHLClient = require('./lib/ghl');
 const qrcode = require('qrcode');
-const { processWhatsAppMedia } = require('./mediaHandler');
+const { processWhatsAppMedia, uploadMediaToGHL } = require('./mediaHandler');
 const axios = require('axios');
 const Stripe = require('stripe');
 const rateLimit = require('express-rate-limit');
@@ -2880,6 +2880,18 @@ app.post('/ghl/provider/webhook', async (req, res) => {
       return res.json({ status: 'success' });
     }
 
+    // Skip error notification messages (prevent loop)
+    if (messageText && messageText.startsWith('⚠️')) {
+      console.log('⏭️ Skipping error notification message (loop prevention)');
+      return res.json({ status: 'success', reason: 'error_notification_skip' });
+    }
+
+    // Skip phone-synced outbound messages (prevent loop)
+    if (messageText && messageText.startsWith('📱')) {
+      console.log('⏭️ Skipping phone-synced outbound message (loop prevention)');
+      return res.json({ status: 'success', reason: 'phone_sync_skip' });
+    }
+
     // Ignore messages that contain media URLs (echo prevention)
     if (messageText && (
       messageText.includes('storage.googleapis.com/msgsndr') ||
@@ -3141,7 +3153,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                     conversationProviderId: ghlAccount.conversation_provider_id || getProviderId(),
                     contactId: contactId,
                     message: errorMessage,
-                    direction: "inbound",
+                    direction: "outbound",
                     status: "delivered",
                     altId: `error_${Date.now()}`
                   };
@@ -3178,7 +3190,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                   conversationProviderId: ghlAccount.conversation_provider_id || getProviderId(),
                   contactId: contactId,
                   message: errorMessage,
-                  direction: "inbound",
+                  direction: "outbound",
                   status: "delivered",
                   altId: `error_${Date.now()}`
                 };
@@ -3263,7 +3275,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                   conversationProviderId: ghlAccount.conversation_provider_id || getProviderId(),
                   contactId: contactId,
                   message: errorMessage,
-                  direction: "inbound",
+                  direction: "outbound",
                   status: "delivered",
                   altId: `error_${Date.now()}`
                 };
@@ -3336,7 +3348,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
                 conversationProviderId: ghlAccount.conversation_provider_id || getProviderId(),
                 contactId: contactId,
                 message: errorMessage,
-                direction: "inbound",
+                direction: "outbound",
                 status: "delivered",
                 altId: `error_${Date.now()}`
               };
@@ -3513,6 +3525,72 @@ app.post('/whatsapp/webhook', async (req, res) => {
     // Upsert contact (same location) - only if setting allows
     let contactId = null;
     let conversationId = null;
+
+    // Handle outbound messages (sent from phone) - sync to GHL conversation
+    if (req.body.fromMe === true) {
+      console.log(`📤 Syncing outbound message (sent from phone) to: ${phone}`);
+      
+      try {
+        // Find contact in GHL
+        const listRes = await makeGHLRequest(`${BASE}/contacts/?locationId=${locationId}&query=${encodeURIComponent(phone)}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${validToken}`,
+            Version: "2021-07-28",
+            "Content-Type": "application/json"
+          }
+        }, ghlAccount);
+
+        let outboundContactId = null;
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          const waNumber = from.replace('@s.whatsapp.net', '');
+          if (listData.contacts && listData.contacts.length > 0) {
+            const match = listData.contacts.find(c =>
+              c.phone === phone || c.phone === phone.replace('+', '') || c.phone === waNumber
+            );
+            if (match) outboundContactId = match.id;
+          }
+        }
+
+        if (!outboundContactId) {
+          console.log(`⏭️ Contact not found in GHL for outbound sync: ${phone}`);
+          return res.json({ status: 'success', reason: 'contact_not_found_for_outbound' });
+        }
+
+        // Send as outbound message to GHL
+        const outboundPayload = {
+          type: "SMS",
+          conversationProviderId: providerId,
+          contactId: outboundContactId,
+          message: `📱 ${message}`,
+          direction: "outbound",
+          status: "delivered",
+          altId: whatsappMsgId || `wa_out_${Date.now()}`
+        };
+
+        const outboundRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${validToken}`,
+            Version: "2021-07-28",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(outboundPayload)
+        }, ghlAccount);
+
+        if (outboundRes.ok) {
+          console.log(`✅ Outbound message synced to GHL for contact: ${outboundContactId}`);
+        } else {
+          const errText = await outboundRes.text();
+          console.error(`❌ Failed to sync outbound message:`, errText);
+        }
+      } catch (outboundError) {
+        console.error(`❌ Error syncing outbound message:`, outboundError.message);
+      }
+
+      return res.json({ status: 'success', reason: 'outbound_synced' });
+    }
 
     if (settings.create_contact_in_ghl) {
       // Setting is ON - create/upsert contact
@@ -3713,7 +3791,6 @@ app.post('/whatsapp/webhook', async (req, res) => {
 
           // Upload media to GHL and get accessible URL
           try {
-            const { uploadMediaToGHL } = require('./mediaHandler');
             const ghlResponse = await uploadMediaToGHL(
               mediaBuffer,
               messageType,

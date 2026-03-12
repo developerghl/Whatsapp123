@@ -1,50 +1,27 @@
+const FormData = require('form-data');
+
 async function uploadMediaToGHL(mediaBuffer, messageType, contactId, accessToken, locationId, conversationId) {
   try {
     console.log(`📤 Uploading ${messageType} to GHL for location: ${locationId}...`);
 
-    // If no conversationId, fetch it from contact
-    if (!conversationId && contactId) {
-      try {
-        console.log(`🔍 No conversationId provided, fetching from contact: ${contactId}`);
-        const searchRes = await fetch(
-          `https://services.leadconnectorhq.com/conversations/search?contactId=${contactId}`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Version': '2021-07-28',
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-
-        if (searchRes.ok) {
-          const searchData = await searchRes.json();
-          if (searchData.conversations && searchData.conversations.length > 0) {
-            conversationId = searchData.conversations[0].id;
-            console.log(`✅ Found conversationId: ${conversationId}`);
-          }
-        }
-      } catch (convError) {
-        console.error(`❌ Error fetching conversationId:`, convError.message);
-      }
-    }
-
-    if (!conversationId) {
-      throw new Error('conversationId is required for media upload and could not be resolved');
-    }
-
-    // Upload to GHL conversation attachment endpoint
     const form = new FormData();
     form.append('fileAttachment', mediaBuffer, {
-      filename: `media_${Date.now()}.${messageType === 'image' ? 'jpg' :
-        messageType === 'video' ? 'mp4' :
-          messageType === 'audio' ? 'mp3' : 'pdf'}`,
-      contentType: messageType === 'image' ? 'image/jpeg' :
-        messageType === 'video' ? 'video/mp4' :
-          messageType === 'audio' ? 'audio/mp3' : 'application/pdf'
+      filename: `media_${Date.now()}.${messageType === 'image' ? 'jpg' : 
+                 messageType === 'video' ? 'mp4' : 
+                 messageType === 'audio' ? 'mp3' : 'pdf'}`,
+      contentType: messageType === 'image' ? 'image/jpeg' : 
+                   messageType === 'video' ? 'video/mp4' : 
+                   messageType === 'audio' ? 'audio/mp3' : 'application/pdf'
     });
-    form.append('conversationId', conversationId);
+    
+    // GHL docs: "One of conversationId or contactId must be provided"
+    if (conversationId) {
+      form.append('conversationId', conversationId);
+    } else if (contactId) {
+      form.append('contactId', contactId);
+    } else {
+      throw new Error('Either conversationId or contactId is required for media upload');
+    }
 
     const uploadResponse = await fetch(
       'https://services.leadconnectorhq.com/conversations/messages/upload',
@@ -71,3 +48,7 @@ async function uploadMediaToGHL(mediaBuffer, messageType, contactId, accessToken
     throw new Error(`GHL upload failed: ${error.message}`);
   }
 }
+
+module.exports = {
+  uploadMediaToGHL
+};

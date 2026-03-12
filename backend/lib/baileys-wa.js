@@ -868,9 +868,56 @@ class BaileysWhatsAppManager {
           
           console.log(`📨 Message received from ${from}, timestamp: ${msg.messageTimestamp}, type: ${m.type}`);
           
-          // Filter: Ignore messages from self (outbound messages)
+          // Handle outbound messages (sent from phone) - sync to GHL
           if (msg.key.fromMe) {
-            console.log(`🚫 Ignoring outbound message (fromMe = true) from: ${from}`);
+            console.log(`📤 Outbound message detected (fromMe = true) to: ${from}`);
+            
+            // Detect message content
+            let outboundText = '';
+            if (msg.message?.conversation) {
+              outboundText = msg.message.conversation;
+            } else if (msg.message?.extendedTextMessage?.text) {
+              outboundText = msg.message.extendedTextMessage.text;
+            } else if (msg.message?.imageMessage) {
+              outboundText = msg.message.imageMessage.caption || '🖼️ Image sent';
+            } else if (msg.message?.videoMessage) {
+              outboundText = msg.message.videoMessage.caption || '🎥 Video sent';
+            } else if (msg.message?.audioMessage) {
+              outboundText = '🎵 Voice note sent';
+            } else if (msg.message?.documentMessage) {
+              outboundText = msg.message.documentMessage.fileName || '📄 Document sent';
+            } else {
+              outboundText = '📎 Media sent';
+            }
+
+            // Skip empty or protocol messages
+            if (!outboundText || msg.message?.protocolMessage) {
+              return;
+            }
+
+            // Forward to webhook with fromMe flag
+            try {
+              const webhookUrl = `${process.env.BACKEND_URL || 'https://api.octendr.com'}/whatsapp/webhook`;
+              fetch(webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  from,
+                  message: outboundText,
+                  messageType: 'text',
+                  timestamp: msg.messageTimestamp,
+                  sessionId,
+                  whatsappMsgId: msg.key.id,
+                  fromMe: true  // Flag for outbound sync
+                })
+              }).then(() => {
+                console.log(`✅ Outbound message synced to webhook: ${outboundText.substring(0, 50)}`);
+              }).catch(err => {
+                console.error(`❌ Failed to sync outbound message:`, err.message);
+              });
+            } catch (err) {
+              console.error(`❌ Failed to sync outbound message:`, err.message);
+            }
             return;
           }
           
