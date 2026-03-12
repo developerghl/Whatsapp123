@@ -1098,7 +1098,9 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
   }
 });
 
-app.use(express.json());
+// Yahan limit 50mb set kar di hai taake large base64 images easily pass ho sakein
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser()); // Parse cookies from requests
 
 // Handle preflight requests - CORS middleware handles this automatically

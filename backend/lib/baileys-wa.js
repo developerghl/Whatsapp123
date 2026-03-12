@@ -416,6 +416,27 @@ class BaileysWhatsAppManager {
         throw socketError;
       }
 
+      // Contacts map - @lid ko real number se map karo
+      const contactsMap = this.clients.get(sessionId)?.contactsMap || new Map();
+
+      socket.ev.on('contacts.upsert', (contacts) => {
+        for (const contact of contacts) {
+          if (contact.id && contact.lid) {
+            // lid -> real JID mapping
+            contactsMap.set(contact.lid, contact.id);
+            console.log(`📇 Contact mapped: ${contact.lid} -> ${contact.id}`);
+          }
+        }
+      });
+
+      socket.ev.on('contacts.update', (updates) => {
+        for (const update of updates) {
+          if (update.id && update.lid) {
+            contactsMap.set(update.lid, update.id);
+          }
+        }
+      });
+
       // Handle connection updates with stability check
       let connectionStable = false;
       let stabilityTimer = null;
@@ -443,7 +464,8 @@ class BaileysWhatsAppManager {
             qr,
             status: 'qr_ready',
             lastUpdate: Date.now(),
-            qrGeneratedAt: Date.now() // Track when QR was generated
+            qrGeneratedAt: Date.now(), // Track when QR was generated
+            contactsMap
           });
           console.log(`📱 Status set to 'qr_ready' for session: ${sessionId} at ${new Date().toLocaleTimeString()}`);
         } else if (connectionStable) {
@@ -671,7 +693,8 @@ class BaileysWhatsAppManager {
             lastUpdate: Date.now(),
             connectedAt: Date.now(),
             connectingSince: null, // Clear connecting timestamp
-            isLoggedOut: false
+            isLoggedOut: false,
+            contactsMap
           });
           
           console.log(`🔒 Status set to 'connected' for session: ${sessionId}`);
@@ -785,7 +808,8 @@ class BaileysWhatsAppManager {
           status: 'connecting',
           lastUpdate: Date.now(),
           connectingSince: Date.now(), // Track when connecting started
-          isLoggedOut: false
+          isLoggedOut: false,
+          contactsMap
         });
         console.log(`🔄 Restoring existing session: ${sessionId}`);
         
@@ -852,9 +876,25 @@ class BaileysWhatsAppManager {
             
             // If @lid, try to get real number from message store or participant
             if (from.includes('@lid')) {
-              console.log(`📤 Outbound to @lid detected, skipping GHL sync (no real number available)`);
-              // TODO: In future, maintain lid->phone mapping to resolve these
-              return;
+              // Client ka contactsMap check karo
+              const currentClient = this.clients.get(sessionId);
+              const resolvedJid = currentClient?.contactsMap?.get(from);
+              
+              if (resolvedJid) {
+                console.log(`✅ Resolved @lid ${from} → ${resolvedJid}`);
+                from = resolvedJid;  // Real number use karo
+              } else {
+                // @lid resolve nahi hua - check karo msg mein koi hint hai?
+                // WhatsApp kabhi kabhi participant field mein real number deta hai
+                const participant = msg.key.participant;
+                if (participant && !participant.includes('@lid')) {
+                  console.log(`✅ Using participant as real number: ${participant}`);
+                  from = participant;
+                } else {
+                  console.log(`⏭️ Cannot resolve @lid ${from} - skipping`);
+                  return;
+                }
+              }
             }
 
             console.log(`📤 Outbound message detected (fromMe = true) to: ${from}`);
