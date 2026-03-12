@@ -416,25 +416,44 @@ class BaileysWhatsAppManager {
         throw socketError;
       }
 
-      // Contacts map - @lid ko real number se map karo
-      const contactsMap = this.clients.get(sessionId)?.contactsMap || new Map();
+      // ✅ Contacts map - @lid ko real number se map karo (NOW WITH PERSISTENCE)
+      const contactsMapFile = path.join(authDir, 'contacts_map.json');
+      let initialContacts = {};
+      if (fs.existsSync(contactsMapFile)) {
+        try { initialContacts = JSON.parse(fs.readFileSync(contactsMapFile, 'utf8')); } catch(e){}
+      }
+      const contactsMap = new Map(Object.entries(initialContacts));
+
+      // Save function helper
+      const saveContactsMap = () => {
+        try {
+          fs.writeFileSync(contactsMapFile, JSON.stringify(Object.fromEntries(contactsMap)));
+        } catch(e) { console.error('Error saving contacts map:', e.message); }
+      };
 
       socket.ev.on('contacts.upsert', (contacts) => {
+        let changed = false;
         for (const contact of contacts) {
           if (contact.id && contact.lid) {
-            // lid -> real JID mapping
             contactsMap.set(contact.lid, contact.id);
-            console.log(`📇 Contact mapped: ${contact.lid} -> ${contact.id}`);
+            contactsMap.set(contact.id, contact.lid); // Reverse mapping too
+            changed = true;
+            console.log(`📇 Contact mapped: ${contact.lid} <-> ${contact.id}`);
           }
         }
+        if (changed) saveContactsMap();
       });
 
       socket.ev.on('contacts.update', (updates) => {
+        let changed = false;
         for (const update of updates) {
           if (update.id && update.lid) {
             contactsMap.set(update.lid, update.id);
+            contactsMap.set(update.id, update.lid); // Reverse mapping too
+            changed = true;
           }
         }
+        if (changed) saveContactsMap();
       });
 
       // Handle connection updates with stability check
@@ -876,7 +895,6 @@ class BaileysWhatsAppManager {
             
             // If @lid, try to get real number from message store or participant
             if (from.includes('@lid')) {
-              // Client ka contactsMap check karo
               const currentClient = this.clients.get(sessionId);
               const resolvedJid = currentClient?.contactsMap?.get(from);
               
@@ -885,13 +903,21 @@ class BaileysWhatsAppManager {
                 from = resolvedJid;  // Real number use karo
               } else {
                 // @lid resolve nahi hua - check karo msg mein koi hint hai?
-                // WhatsApp kabhi kabhi participant field mein real number deta hai
                 const participant = msg.key.participant;
+                const senderPn = msg.key.senderPn;
+                const contextParticipant = msg.message?.extendedTextMessage?.contextInfo?.participant;
+                
                 if (participant && !participant.includes('@lid')) {
                   console.log(`✅ Using participant as real number: ${participant}`);
                   from = participant;
+                } else if (senderPn && !senderPn.includes('@lid')) {
+                  console.log(`✅ Using senderPn as real number: ${senderPn}`);
+                  from = senderPn;
+                } else if (contextParticipant && !contextParticipant.includes('@lid')) {
+                  console.log(`✅ Using context participant as real number: ${contextParticipant}`);
+                  from = contextParticipant;
                 } else {
-                  console.log(`⏭️ Cannot resolve @lid ${from} - skipping`);
+                  console.log(`⏭️ Cannot resolve @lid ${from} from memory. Skipping outbound sync for this specific message.`);
                   return;
                 }
               }
