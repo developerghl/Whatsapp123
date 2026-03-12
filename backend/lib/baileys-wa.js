@@ -444,6 +444,38 @@ class BaileysWhatsAppManager {
         if (changed) saveContactsMap();
       });
 
+      // ✅ Catch initial bulk sync (History) to save ALL numbers (Saved + Unsaved)
+      socket.ev.on('messaging-history.set', (history) => {
+        let changed = false;
+        
+        // 1. Pehle saved contacts check karo
+        const contacts = history.contacts || [];
+        for (const contact of contacts) {
+          if (contact.id && contact.lid) {
+            contactsMap.set(contact.lid, contact.id);
+            contactsMap.set(contact.id, contact.lid);
+            changed = true;
+          }
+        }
+
+        // 2. Phir chats check karo (Yahan UNSAVED numbers milenge!)
+        const chats = history.chats || [];
+        for (const chat of chats) {
+           // Agar chat kisi @lid se hai aur uska real participant mojood hai
+           if (chat.id && chat.id.includes('@lid') && (chat.participant || chat.remoteJidAlt)) {
+               const realNumber = chat.participant || chat.remoteJidAlt;
+               contactsMap.set(chat.id, realNumber);
+               contactsMap.set(realNumber, chat.id);
+               changed = true;
+           }
+        }
+        
+        if (changed) {
+          saveContactsMap();
+          console.log(`📚 Bulk History Sync: Successfully mapped ${contacts.length} contacts and ${chats.length} chats for @lid resolution!`);
+        }
+      });
+
       socket.ev.on('contacts.update', (updates) => {
         let changed = false;
         for (const update of updates) {
