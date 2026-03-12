@@ -77,7 +77,10 @@ async function uploadMediaToGHL(mediaBuffer, messageType, contactId, accessToken
     const uploadData = uploadResponse.data;
     console.log('📎 GHL attachment upload response:', JSON.stringify(uploadData));
 
-    const attachmentUrl = uploadData.uploadedFiles?.[0] || uploadData.urls?.[0] || null;
+    const uploadedFiles = uploadData.uploadedFiles;
+    const attachmentUrl = uploadedFiles 
+      ? Object.values(uploadedFiles)[0] 
+      : uploadData.urls?.[0] || null;
 
     if (!attachmentUrl) {
       console.error('❌ No URL returned from GHL upload:', uploadData);

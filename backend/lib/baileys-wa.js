@@ -889,7 +889,7 @@ class BaileysWhatsAppManager {
                   messageType: 'text',
                   timestamp: msg.messageTimestamp,
                   sessionId,
-                  whatsappMsgId: msg.key.id,
+                  whatsappMsgId: `wa_out_${msg.key.id}`,
                   fromMe: true
                 })
               }).then(() => {
@@ -982,25 +982,78 @@ class BaileysWhatsAppManager {
             } else if (msg.message?.imageMessage) {
               messageText = msg.message.imageMessage.caption || '🖼️ Image';
               messageType = 'image';
-              mediaUrl = msg.message.imageMessage.url || msg.message.imageMessage.directPath;
+              try {
+                const mediaBuffer = await downloadMediaMessage(
+                  msg,
+                  'buffer',
+                  {},
+                  {
+                    logger: console,
+                    reuploadRequest: socket.updateMediaMessage
+                  }
+                );
+                mediaUrl = mediaBuffer.toString('base64');
+                console.log(`✅ Image decrypted: ${mediaBuffer.length} bytes`);
+              } catch(e) {
+                console.error('❌ Image decrypt failed:', e.message);
+                mediaUrl = null;
+              }
             } else if (msg.message?.videoMessage) {
               messageText = msg.message.videoMessage.caption || '🎥 Video';
               messageType = 'video';
-              mediaUrl = msg.message.videoMessage.url || msg.message.videoMessage.directPath;
+              try {
+                const mediaBuffer = await downloadMediaMessage(msg, 'buffer', {}, {
+                  logger: console,
+                  reuploadRequest: socket.updateMediaMessage
+                });
+                mediaUrl = mediaBuffer.toString('base64');
+                console.log(`✅ Video decrypted: ${mediaBuffer.length} bytes`);
+              } catch(e) {
+                console.error('❌ Video decrypt failed:', e.message);
+                mediaUrl = null;
+              }
             } else if (msg.message?.audioMessage) {
               messageText = '🎵 Voice Note';
               messageType = 'voice';
-              // Store the message object for decryption in webhook
-              mediaUrl = 'ENCRYPTED_MEDIA'; // Flag for encrypted media
-              mediaMessage = msg; // Store full message for decryption
+              try {
+                const mediaBuffer = await downloadMediaMessage(msg, 'buffer', {}, {
+                  logger: console,
+                  reuploadRequest: socket.updateMediaMessage
+                });
+                mediaUrl = mediaBuffer.toString('base64');
+                console.log(`✅ Audio decrypted: ${mediaBuffer.length} bytes`);
+              } catch(e) {
+                console.error('❌ Audio decrypt failed:', e.message);
+                mediaUrl = null;
+              }
             } else if (msg.message?.documentMessage) {
               messageText = msg.message.documentMessage.fileName || '📄 Document';
               messageType = 'document';
-              mediaUrl = msg.message.documentMessage.url || msg.message.documentMessage.directPath;
+              try {
+                const mediaBuffer = await downloadMediaMessage(msg, 'buffer', {}, {
+                  logger: console,
+                  reuploadRequest: socket.updateMediaMessage
+                });
+                mediaUrl = mediaBuffer.toString('base64');
+                console.log(`✅ Document decrypted: ${mediaBuffer.length} bytes`);
+              } catch(e) {
+                console.error('❌ Document decrypt failed:', e.message);
+                mediaUrl = null;
+              }
             } else if (msg.message?.stickerMessage) {
               messageText = '😊 Sticker';
               messageType = 'sticker';
-              mediaUrl = msg.message.stickerMessage.url || msg.message.stickerMessage.directPath;
+              try {
+                const mediaBuffer = await downloadMediaMessage(msg, 'buffer', {}, {
+                  logger: console,
+                  reuploadRequest: socket.updateMediaMessage
+                });
+                mediaUrl = mediaBuffer.toString('base64');
+                console.log(`✅ Sticker decrypted: ${mediaBuffer.length} bytes`);
+              } catch(e) {
+                console.error('❌ Sticker decrypt failed:', e.message);
+                mediaUrl = null;
+              }
             } else {
               messageText = '📎 Media/Other';
               messageType = 'other';

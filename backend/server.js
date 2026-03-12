@@ -2895,10 +2895,11 @@ app.post('/ghl/provider/webhook', async (req, res) => {
       return res.json({ status: 'success', reason: 'error_notification_skip' });
     }
 
-    // Skip phone-synced outbound messages (prevent loop)
-    if (messageText && messageText.startsWith('📱')) {
-      console.log('⏭️ Skipping phone-synced outbound message (loop prevention)');
-      return res.json({ status: 'success', reason: 'phone_sync_skip' });
+    // ✅ Loop prevention — phone se bheja gaya outbound ignore karo
+    const incomingAltId = req.body.altId || req.body.messageId || '';
+    if (incomingAltId.startsWith('wa_out_')) {
+      console.log(`⏭️ Skipping — originated from phone: ${incomingAltId}`);
+      return res.json({ status: 'skipped', reason: 'phone_originated' });
     }
 
     // Ignore messages that contain media URLs (echo prevention)
@@ -3537,45 +3538,57 @@ app.post('/whatsapp/webhook', async (req, res) => {
 
     // Handle outbound messages (sent from phone) - sync to GHL conversation
     if (req.body.fromMe === true) {
-      console.log(`📤 Syncing outbound message (sent from phone) to: ${phone}`);
-      
+      console.log(`📤 Outbound from phone to: ${phone}`);
+    
+      // ✅ Loop prevention — same message dobara process mat karo
+      const outAltId = req.body.whatsappMsgId || `wa_out_${Date.now()}`;
+      if (!global.outboundSyncCache) global.outboundSyncCache = new Map();
+      if (global.outboundSyncCache.has(outAltId)) {
+        return res.json({ status: 'success', reason: 'duplicate_skip' });
+      }
+      global.outboundSyncCache.set(outAltId, Date.now());
+      setTimeout(() => global.outboundSyncCache.delete(outAltId), 5 * 60 * 1000);
+    
+      // Contact dhundo
       try {
-        // Find contact in GHL
-        const listRes = await makeGHLRequest(`${BASE}/contacts/?locationId=${locationId}&query=${encodeURIComponent(phone)}`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${validToken}`,
-            Version: "2021-07-28",
-            "Content-Type": "application/json"
-          }
-        }, ghlAccount);
-
-        let outboundContactId = null;
+        const listRes = await makeGHLRequest(
+          `${BASE}/contacts/?locationId=${locationId}&query=${encodeURIComponent(phone)}`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${validToken}`,
+              Version: "2021-07-28",
+              "Content-Type": "application/json"
+            }
+          }, ghlAccount
+        );
+    
+        let outContactId = null;
         if (listRes.ok) {
           const listData = await listRes.json();
-          const waNumber = from.replace('@s.whatsapp.net', '');
-          if (listData.contacts && listData.contacts.length > 0) {
-            const match = listData.contacts.find(c =>
-              c.phone === phone || c.phone === phone.replace('+', '') || c.phone === waNumber
-            );
-            if (match) outboundContactId = match.id;
-          }
+          const waNum = from.replace('@s.whatsapp.net', '');
+          const match = listData.contacts?.find(c =>
+            c.phone === phone ||
+            c.phone === phone.replace('+', '') ||
+            c.phone === waNum
+          );
+          if (match) outContactId = match.id;
         }
-
-        if (!outboundContactId) {
-          console.log(`⏭️ Contact not found in GHL for outbound sync: ${phone}`);
-          return res.json({ status: 'success', reason: 'contact_not_found_for_outbound' });
+    
+        if (!outContactId) {
+          console.log(`⏭️ Contact not found for outbound: ${phone}`);
+          return res.json({ status: 'success', reason: 'contact_not_found' });
         }
-
-        // Send as outbound message to GHL
-        const outboundPayload = {
+    
+        // ✅ GHL mein outbound direction se add karo
+        const payload = {
           type: "SMS",
           conversationProviderId: providerId,
-          contactId: outboundContactId,
-          message: `📱 ${message}`,
-          direction: "outbound",
+          contactId: outContactId,
+          message: message,        // clean message — koi prefix nahi
+          direction: "outbound",   // ← outbound
           status: "delivered",
-          altId: whatsappMsgId || `wa_out_${Date.now()}`
+          altId: outAltId          // ← unique ID — loop rokta hai
         };
 
         const outboundRes = await makeGHLRequest(`${BASE}/conversations/messages/inbound`, {
@@ -3711,91 +3724,12 @@ app.post('/whatsapp/webhook', async (req, res) => {
           let mediaBuffer;
 
           // Check if this is encrypted media that needs decryption
-          if (mediaUrl === 'ENCRYPTED_MEDIA' && mediaMessage) {
-            console.log(`🔓 Decrypting encrypted media with Baileys...`);
-
-            // Get the WhatsApp client for this session
-            const client = waManager.getClient(sessionId);
-            if (!client || !client.socket) {
-              throw new Error('WhatsApp client not available for decryption');
-            }
-
-            // Decrypt the media using Baileys
-            try {
-              // Try downloadContentFromMessage first (newer method)
-              console.log(`🔄 Trying downloadContentFromMessage...`);
-              const stream = await downloadContentFromMessage(mediaMessage, messageType);
-              const chunks = [];
-              for await (const chunk of stream) {
-                chunks.push(chunk);
-              }
-              mediaBuffer = Buffer.concat(chunks);
-              console.log(`✅ Decrypted ${mediaBuffer.length} bytes using downloadContentFromMessage`);
-            } catch (downloadError) {
-              console.error(`❌ downloadContentFromMessage failed:`, downloadError.message);
-
-              // Fallback to downloadMediaMessage
-              console.log(`🔄 Trying fallback method downloadMediaMessage...`);
-              try {
-                mediaBuffer = await downloadMediaMessage(
-                  mediaMessage,
-                  'buffer',
-                  {},
-                  {
-                    logger: console,
-                    reuploadRequest: client.socket.updateMediaMessage
-                  }
-                );
-                console.log(`✅ Decrypted ${mediaBuffer.length} bytes using downloadMediaMessage fallback`);
-              } catch (decryptError) {
-                console.error(`❌ Media decryption failed:`, decryptError.message);
-
-                // Try alternative approach - use the URL directly
-                if (mediaMessage.message.audioMessage?.url) {
-                  console.log(`🔄 Trying direct URL download as fallback...`);
-                  const response = await fetch(mediaMessage.message.audioMessage.url);
-                  if (response.ok) {
-                    mediaBuffer = Buffer.from(await response.arrayBuffer());
-                    console.log(`✅ Downloaded ${mediaBuffer.length} bytes via direct URL`);
-                  } else {
-                    throw new Error('Direct URL download also failed');
-                  }
-                } else {
-                  throw decryptError;
-                }
-              }
-            }
-
-          } else if (mediaUrl && mediaUrl.includes('.enc')) {
-            console.log(`🔓 Detected encrypted URL, trying direct download...`);
-            // Try direct download first
-            const response = await fetch(mediaUrl);
-            if (response.ok) {
-              mediaBuffer = Buffer.from(await response.arrayBuffer());
-              console.log(`✅ Downloaded ${mediaBuffer.length} bytes`);
-            } else {
-              throw new Error('Failed to download encrypted media');
-            }
+          if (mediaUrl) {
+            // mediaUrl ab base64 string hai (Baileys ne already decrypt kar diya)
+            mediaBuffer = Buffer.from(mediaUrl, 'base64');
+            console.log(`✅ Using pre-decrypted buffer: ${mediaBuffer.length} bytes`);
           } else {
-            // Regular URL download
-            try {
-              // Try Baileys downloadMediaMessage first (handles encrypted WhatsApp URLs)
-              if (mediaMessage) {
-                mediaBuffer = await downloadMediaMessage(mediaMessage, 'buffer', {}, {
-                  logger: console,
-                  reuploadRequest: waManager.getClient(sessionId)?.updateMediaMessage
-                });
-              }
-              if (!mediaBuffer || mediaBuffer.length === 0) {
-                // Fallback to direct fetch
-                const response = await fetch(mediaUrl);
-                mediaBuffer = Buffer.from(await response.arrayBuffer());
-              }
-            } catch (dlErr) {
-              console.error('❌ Media download failed, trying direct fetch:', dlErr);
-              const response = await fetch(mediaUrl);
-              mediaBuffer = Buffer.from(await response.arrayBuffer());
-            }
+            throw new Error('No media buffer provided in payload');
           }
 
           // Upload media to GHL and get accessible URL
