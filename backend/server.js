@@ -28,6 +28,9 @@ const subaccountHelpers = require('./lib/subaccount-helpers');
 // Import drip queue processor (already instantiated)
 const dripQueueProcessor = require('./lib/drip-queue-processor');
 
+// Global GHL Configuration
+const BASE = "https://services.leadconnectorhq.com";
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -84,11 +87,6 @@ async function refreshGHLToken(ghlAccount) {
     formData.append('refresh_token', ghlAccount.refresh_token);
     formData.append('client_id', GHL_CLIENT_ID);
     formData.append('client_secret', GHL_CLIENT_SECRET);
-    if (ghlAccount.location_id) {
-      formData.append('userType', 'Location');
-    } else if (ghlAccount.company_id) {
-      formData.append('userType', 'Company');
-    }
 
     const response = await fetch('https://services.leadconnectorhq.com/oauth/token', {
       method: 'POST',
@@ -2815,6 +2813,17 @@ app.post('/ghl/provider/webhook', async (req, res) => {
 
     console.log('✅ Processing OutboundMessage webhook');
 
+    const earlyMsgId = req.body.messageId;
+    if (earlyMsgId) {
+      if (!global.webhookDedup) global.webhookDedup = new Map();
+      if (global.webhookDedup.has(earlyMsgId)) {
+        console.log(`⏭️ Duplicate OutboundMessage ignored: ${earlyMsgId}`);
+        return res.json({ status: 'skipped', reason: 'duplicate_webhook' });
+      }
+      global.webhookDedup.set(earlyMsgId, Date.now());
+      setTimeout(() => global.webhookDedup.delete(earlyMsgId), 60000);
+    }
+
     const locationId = req.body.locationId;
 
     // Only process if this location has an active WhatsApp session
@@ -2948,7 +2957,7 @@ app.post('/ghl/provider/webhook', async (req, res) => {
       try {
         await subaccountHelpers.addToDripQueue(ghlAccount.id, ghlAccount.user_id, {
           contactId: contactId || null,
-          phone: phoneNumber,
+          phone: req.body.phone || req.body.contactPhone || req.body.recipientPhone || null,
           message: messageText,
           messageType: 'text',
           attachments: attachments || []
@@ -3428,7 +3437,6 @@ app.post('/ghl/provider/webhook', async (req, res) => {
 });
 
 // Global GHL Configuration
-const BASE = "https://services.leadconnectorhq.com";
 const HEADERS = {
   Authorization: `Bearer ${process.env.GHL_LOCATION_API_KEY}`,
   Version: "2021-07-28",
@@ -7738,6 +7746,12 @@ if (!global.recentMessages) {
 if (!global.recentInboundMessages) {
   global.recentInboundMessages = new Set();
 }
+if (!global.webhookDedup) {
+  global.webhookDedup = new Map();
+}
+if (!global.outboundSyncCache) {
+  global.outboundSyncCache = new Map();
+}
 
 // Cleanup global caches periodically to prevent memory leaks
 setInterval(() => {
@@ -7760,6 +7774,24 @@ setInterval(() => {
     // Clean recent inbound messages set if it gets too large
     if (global.recentInboundMessages && global.recentInboundMessages.size > 10000) {
       global.recentInboundMessages.clear();
+    }
+
+    if (global.webhookDedup) {
+      const now = Date.now();
+      for (const [key, ts] of global.webhookDedup.entries()) {
+        if (now - ts > 5 * 60 * 1000) {
+          global.webhookDedup.delete(key);
+        }
+      }
+    }
+
+    if (global.outboundSyncCache) {
+      const now = Date.now();
+      for (const [key, ts] of global.outboundSyncCache.entries()) {
+        if (now - ts > 10 * 60 * 1000) {
+          global.outboundSyncCache.delete(key);
+        }
+      }
     }
   } catch (cleanupError) {
     console.error('❌ Error cleaning global caches:', cleanupError);
