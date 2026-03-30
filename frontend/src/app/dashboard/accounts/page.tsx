@@ -8,7 +8,6 @@ import SubaccountSettingsModal from '@/components/dashboard/SubaccountSettingsMo
 import PaymentRenewalModal from '@/components/dashboard/PaymentRenewalModal'
 import Modal from '@/components/ui/Modal'
 import { useToast } from '@/components/ui/ToastProvider'
-import { useSearchParams, useRouter } from 'next/navigation'
 
 interface SubaccountStatus {
   id: string
@@ -26,8 +25,6 @@ interface SubaccountStatus {
 export default function AccountsPage() {
   const { user } = useAuth()
   const toast = useToast()
-  const searchParams = useSearchParams()
-  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [subaccountStatuses, setSubaccountStatuses] = useState<SubaccountStatus[]>([])
   const [searchQuery, setSearchQuery] = useState('')

@@ -13,7 +13,6 @@ export default function Dashboard() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const toast = useToast()
-  const toastShownRef = useRef<string | null>(null)
   const hasProcessedParams = useRef(false)
   const [stats, setStats] = useState({
     totalAccounts: 0,
@@ -190,7 +189,7 @@ export default function Dashboard() {
         }
       }, 50)
     }
-  }, []) // Empty dependency array - only run once on mount
+  }, [searchParams, toast])
 
   if (loading) {
     return (
