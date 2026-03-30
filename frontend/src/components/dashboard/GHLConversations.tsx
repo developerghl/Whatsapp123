@@ -112,7 +112,7 @@ export default function GHLConversations({ locationId }: GHLConversationsProps) 
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <h3 className="text-lg font-medium text-gray-900">GHL Conversations</h3>
-        <p className="text-sm text-gray-500">Active conversations from GoHighLevel</p>
+        <p className="text-sm text-gray-500">Active conversations from LeadConnector</p>
       </div>
 
       {/* Search */}

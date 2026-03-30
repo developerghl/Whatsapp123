@@ -9,6 +9,19 @@ const fs = require('fs');
 const path = require('path');
 const emailService = require('./email');
 
+// Shared silent logger to prevent memory leaks from millions of child loggers allocating new objects
+const silentLogger = {
+  level: 'silent',
+  trace: () => {},
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  fatal: () => {}
+};
+silentLogger.child = () => silentLogger;
+
+
 /**
  * BaileysWhatsAppManager - Production-ready WhatsApp connection manager
  * 
@@ -327,24 +340,7 @@ class BaileysWhatsAppManager {
       try {
         socket = makeWASocket({
         auth: state,
-        logger: {
-          level: 'silent',
-          child: () => ({ 
-            level: 'silent',
-            trace: () => {},
-            debug: () => {},
-            info: () => {},
-            warn: () => {},
-            error: () => {},
-            fatal: () => {}
-          }),
-          trace: () => {},
-          debug: () => {},
-          info: () => {},
-          warn: () => {},
-          error: () => {},
-          fatal: () => {}
-        },
+        logger: silentLogger,
         browser: ['Octendr', 'Chrome', '1.0.0'],
         version: version, // Use the dynamically fetched version
         generateHighQualityLinkPreview: true,
@@ -575,14 +571,18 @@ class BaileysWhatsAppManager {
             // Clear old client and create new one
             if (this.clients.has(sessionId)) {
               const oldClient = this.clients.get(sessionId);
-              // Clean up old socket
+              // Clean up old socket and memory leaks
               try {
-                if (oldClient.socket && oldClient.socket.end) {
-                  oldClient.socket.end();
+                if (oldClient.socket) {
+                  // Remove all listeners to prevent memory leak
+                  if (oldClient.socket.ev) oldClient.socket.ev.removeAllListeners();
+                  if (oldClient.socket.ws) oldClient.socket.ws.removeAllListeners();
+                  if (oldClient.socket.end) oldClient.socket.end();
                 }
               } catch (e) {
-                console.warn(`⚠️ Error ending old socket: ${e.message}`);
+                console.warn(`⚠️ Error cleaning up old socket: ${e.message}`);
               }
+              this.clients.delete(sessionId);
             }
             
             // Create new client (this will trigger reconnection)

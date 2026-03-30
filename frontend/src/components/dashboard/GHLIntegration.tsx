@@ -73,7 +73,7 @@ export default function GHLIntegration({ }: GHLIntegrationProps) {
         </div>
       ) : (
         <div className="space-y-4">
-          <p className="text-gray-600">Connect your GoHighLevel account to enable advanced features</p>
+          <p className="text-gray-600">Connect your LeadConnector account to enable advanced features</p>
           
           <div className="flex space-x-4">
             <button
@@ -83,7 +83,7 @@ export default function GHLIntegration({ }: GHLIntegrationProps) {
               }}
               className="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
             >
-              Login with GoHighLevel
+              Login with LeadConnector
             </button>
             
             <button

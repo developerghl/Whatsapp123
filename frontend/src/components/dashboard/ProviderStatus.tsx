@@ -75,7 +75,7 @@ export default function ProviderStatus({ subaccountId, ghlLocationId }: Provider
           
           <div className="mt-3 p-3 bg-green-50 rounded-md">
             <p className="text-xs text-green-800">
-              ✅ Your WhatsApp integration is active and ready to receive messages from GoHighLevel.
+              ✅ Your WhatsApp integration is active and ready to receive messages from LeadConnector.
             </p>
           </div>
         </div>
@@ -95,7 +95,7 @@ export default function ProviderStatus({ subaccountId, ghlLocationId }: Provider
           
           <div className="mt-3 p-3 bg-yellow-50 rounded-md">
             <p className="text-xs text-yellow-800">
-              ⚠️ To enable two-way messaging, you need to configure the Conversations Provider in GoHighLevel.
+              ⚠️ To enable two-way messaging, you need to configure the Conversations Provider in LeadConnector.
             </p>
           </div>
         </div>

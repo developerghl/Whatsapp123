@@ -142,7 +142,7 @@ export default function Dashboard() {
       toast.showToast({
         type: 'success',
         title: 'Account Connected',
-        message: 'Your GoHighLevel account has been connected successfully!',
+        message: 'Your LeadConnector account has been connected successfully!',
         durationMs: 5000
       })
     } else if (error === 'account_already_added') {
@@ -156,7 +156,7 @@ export default function Dashboard() {
       toast.showToast({
         type: 'error',
         title: 'Location Already In Use',
-        message: 'This location is already linked to another account. Please use a different GoHighLevel location.',
+        message: 'This location is already linked to another account. Please use a different LeadConnector location.',
         durationMs: 6000
       })
     } else if (error === 'limit_reached') {
@@ -425,7 +425,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Octendr</h3>
             <p className="text-gray-600 mb-8">
-              Connect your GoHighLevel account with WhatsApp to start automating conversations
+              Connect your LeadConnector account with WhatsApp to start automating conversations
             </p>
             <Link
               href="/dashboard/add-subaccount"

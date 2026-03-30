@@ -1,5 +1,5 @@
 /**
- * GoHighLevel API utilities
+ * LeadConnector API utilities
  */
 
 const axios = require('axios');

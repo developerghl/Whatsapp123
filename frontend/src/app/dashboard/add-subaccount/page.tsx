@@ -278,7 +278,7 @@ export default function AddSubAccount() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Add Subaccount</h1>
-        <p className="text-gray-600 mt-1">Connect your GoHighLevel location to start using WhatsApp</p>
+        <p className="text-gray-600 mt-1">Connect your LeadConnector location to start using WhatsApp</p>
       </div>
 
       {paymentRequired && (
@@ -338,7 +338,7 @@ export default function AddSubAccount() {
           
           <h2 className="text-2xl font-bold text-gray-900 mb-3">Connect Location</h2>
           <p className="text-gray-600 mb-8">
-            Connect your GoHighLevel location to enable WhatsApp integration
+            Connect your LeadConnector location to enable WhatsApp integration
           </p>
           
           {/* Limit Warning */}

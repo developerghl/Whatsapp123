@@ -170,9 +170,10 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Login failed');
       localStorage.setItem('user', JSON.stringify(data.user));
-      // Use window.location.href instead of router.push to force full page reload
-      // This ensures localStorage is properly read before dashboard loads
-      window.location.href = '/dashboard';
+      // Respect redirect query parameter if provided
+      const params = new URLSearchParams(window.location.search);
+      const redirectPath = params.get('redirect') || '/dashboard';
+      window.location.href = redirectPath;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
       setIsLoading(false); // Only reset loading on error

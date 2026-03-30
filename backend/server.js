@@ -1426,6 +1426,15 @@ app.get('/oauth/callback', async (req, res) => {
       return res.status(400).json({ error: 'Authorization code not provided' });
     }
 
+    if (!state) {
+      console.log('⚠️ No state parameter - marketplace install flow');
+      // Code is still valid! Redirect to frontend to get user context
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+      return res.redirect(
+        `${frontendUrl}/auth/callback?code=${encodeURIComponent(code)}&locationId=${encodeURIComponent(locationId || '')}&marketplace_install=true`
+      );
+    }
+
     // Don't require locationId in query - GHL may provide it in token response
     console.log('Proceeding with token exchange...');
 
@@ -1472,14 +1481,6 @@ app.get('/oauth/callback', async (req, res) => {
     // Use state as target user ID (passed from frontend)
     // Only logged-in users can add subaccounts
     let targetUserId = null;
-
-    if (!state) {
-      console.error('❌ State parameter missing - user must be logged in');
-      return res.status(400).json({
-        error: 'Authentication required. Please login to add GHL accounts.',
-        code: 'AUTH_REQUIRED'
-      });
-    }
 
     try {
       targetUserId = decodeURIComponent(state);
@@ -2686,7 +2687,7 @@ app.post('/admin/ghl/connect-subaccount', requireAuth, async (req, res) => {
 app.get('/ghl/provider/config', (req, res) => {
   res.json({
     name: "WhatsApp SMS Provider",
-    description: "Connect WhatsApp as SMS provider for GoHighLevel",
+    description: "Connect WhatsApp as SMS provider for LeadConnector",
     version: "1.0.0",
     provider: {
       type: "sms",
@@ -4259,7 +4260,7 @@ app.get('/ghl/provider', async (req, res) => {
             
             <ol>
               <li class="step">
-                Go to <span class="highlight">GoHighLevel Dashboard</span>
+                Go to <span class="highlight">LeadConnector Dashboard</span>
               </li>
               <li class="step">
                 Navigate to <span class="highlight">Settings → General</span>
@@ -4617,7 +4618,7 @@ app.get('/ghl/provider', async (req, res) => {
                 </div>
                 <div class="header-text">
                   <h1 class="title">WhatsApp Business Integration</h1>
-                  <p class="subtitle">Connect your WhatsApp to GoHighLevel SMS Provider</p>
+                  <p class="subtitle">Connect your WhatsApp to LeadConnector SMS Provider</p>
                 </div>
               </div>
 
@@ -7756,28 +7757,28 @@ if (!global.outboundSyncCache) {
 // Cleanup global caches periodically to prevent memory leaks
 setInterval(() => {
   try {
-    // Clean old message cache entries (older than 10 minutes)
+    const now = Date.now();
+    
+    // Clean old message cache entries (older than 5 minutes)
     if (global.messageCache) {
-      const now = Date.now();
       for (const [key, value] of global.messageCache.entries()) {
-        if (now - value.timestamp > 10 * 60 * 1000) {
+        if (now - value.timestamp > 5 * 60 * 1000) {
           global.messageCache.delete(key);
         }
       }
     }
 
     // Clean recent messages set if it gets too large (prevent memory leak)
-    if (global.recentMessages && global.recentMessages.size > 10000) {
+    if (global.recentMessages && global.recentMessages.size > 2000) {
       global.recentMessages.clear();
     }
 
     // Clean recent inbound messages set if it gets too large
-    if (global.recentInboundMessages && global.recentInboundMessages.size > 10000) {
+    if (global.recentInboundMessages && global.recentInboundMessages.size > 2000) {
       global.recentInboundMessages.clear();
     }
 
     if (global.webhookDedup) {
-      const now = Date.now();
       for (const [key, ts] of global.webhookDedup.entries()) {
         if (now - ts > 5 * 60 * 1000) {
           global.webhookDedup.delete(key);
@@ -7786,9 +7787,8 @@ setInterval(() => {
     }
 
     if (global.outboundSyncCache) {
-      const now = Date.now();
       for (const [key, ts] of global.outboundSyncCache.entries()) {
-        if (now - ts > 10 * 60 * 1000) {
+        if (now - ts > 5 * 60 * 1000) {
           global.outboundSyncCache.delete(key);
         }
       }
@@ -7796,18 +7796,152 @@ setInterval(() => {
   } catch (cleanupError) {
     console.error('❌ Error cleaning global caches:', cleanupError);
   }
-}, 30 * 60 * 1000); // Every 30 minutes
+}, 5 * 60 * 1000); // Every 5 minutes
 
 // Global error handlers to prevent server crashes
+const adminEmailReceiver = process.env.ADMIN_EMAIL || 'support@octendr.com'; // Change to your actual admin email later or env 
+const emailService = require('./lib/email');
+
+// --- Daily Disconnect Checking Logic ---
+const fs = require('fs');
+const path = require('path');
+
+async function checkDailyDisconnectedAccounts() {
+  try {
+    console.log('🔍 Running Daily Disconnect Checker...');
+    
+    const { createClient } = require('@supabase/supabase-js');
+    const supabaseTracker = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+    // --- Auto-Clean Dead Sessions Database ---
+    try {
+      console.log('🧹 Running Auto-Clean for dead WhatsApp sessions...');
+      const date24hAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const date7DaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      
+      // 1. Delete abandoned QR scan ghosts (NULL phone numbers > 24 hours old)
+      const { error: err1 } = await supabaseTracker.from('sessions')
+        .delete()
+        .eq('status', 'disconnected')
+        .is('phone_number', null)
+        .lt('created_at', date24hAgo);
+        
+      // 2. Delete ALL disconnected sessions older than 7 days
+      const { error: err2 } = await supabaseTracker.from('sessions')
+        .delete()
+        .eq('status', 'disconnected')
+        .lt('created_at', date7DaysAgo);
+        
+      if (err1) console.error('Warning cleaning abandoned QR sessions:', err1.message);
+      if (err2) console.error('Warning cleaning 7-day old sessions:', err2.message);
+    } catch (cleanErr) {
+      console.error('❌ Auto-Clean failed:', cleanErr.message);
+    }
+    // ----------------------------------------
+
+    // Get all GHL Accounts
+    const { data: accounts, error: accountsError } = await supabaseTracker.from('ghl_accounts').select('id, user_id, location_id');
+    if (accountsError || !accounts) return;
+
+    // Load Reminders tracker
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const remindersPath = path.join(dataDir, 'daily_reminders.json');
+    let dailyReminders = {};
+    if (fs.existsSync(remindersPath)) {
+      try { dailyReminders = JSON.parse(fs.readFileSync(remindersPath, 'utf8')); } catch (e) {}
+    }
+    const today = new Date().toISOString().split('T')[0];
+    let fileChanged = false;
+
+    for (const account of accounts) {
+      if (!account.id || !account.user_id) continue;
+      
+      const { data: sessions, error: sessionsError } = await supabaseTracker
+        .from('sessions')
+        .select('id, status')
+        .eq('subaccount_id', account.id);
+        
+      if (sessionsError || !sessions || sessions.length === 0) continue;
+
+      // Ensure NO sessions are ready/connected
+      const hasReadySession = sessions.some(s => s.status === 'ready' || s.status === 'connected');
+      
+      if (!hasReadySession) {
+        if (dailyReminders[account.id] !== today) {
+          console.log(`📡 Disconnected User Found! Sending reminder to User: ${account.user_id} for Location: ${account.location_id}`);
+          if (emailService && emailService.sendDailyDisconnectReminder) {
+             await emailService.sendDailyDisconnectReminder(account.user_id, account.location_id);
+          } else {
+             console.error('Email service module is missing sendDailyDisconnectReminder');
+          }
+          
+          dailyReminders[account.id] = today;
+          fileChanged = true;
+        }
+      }
+    }
+    
+    if (fileChanged) {
+      fs.writeFileSync(remindersPath, JSON.stringify(dailyReminders, null, 2));
+    }
+
+  } catch (error) {
+    console.error('❌ Error inside Daily Disconnect Checker:', error.message);
+  }
+}
+
+// Run checker every 60 minutes
+setInterval(checkDailyDisconnectedAccounts, 60 * 60 * 1000);
+// Also run once on startup, after a 5 minute delay
+setTimeout(checkDailyDisconnectedAccounts, 5 * 60 * 1000);
+// ---------------------------------------
+
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-  // Don't exit - just log the error
+  // Optional: Send email for unhandled promise (usually non-fatal, so we might want to skip to avoid spam)
+  // Let's only log unhandled rejections as they don't always crash Node 14+
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  // Don't exit - just log the error
-  // In production, you might want to gracefully shutdown
+  console.error('❌ FATAL Uncaught Exception:', error);
+  
+  // Try sending an emergency email using our email module before crashing or moving on
+  try {
+    const errorDetails = error ? error.stack || error.message : 'Unknown exception';
+    console.log('📧 Dispatching emergency crash report...');
+    
+    // Non-blocking fire-and-forget email dispatch
+    // We recreate a minimal transporter/mail implementation here to avoid circular logic
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: process.env.SMTP_PORT || 587,
+      secure: false, // true for 465, false for 587
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    transporter.sendMail({
+      from: `"Octendr System Error" <${process.env.SMTP_USER}>`,
+      to: adminEmailReceiver,
+      subject: `🚨 CRITICAL: Octendr Node.js Crash Alert`,
+      html: `
+        <h2>Backend Server Exception Triggered</h2>
+        <p>The backend encountered a fatal uncaught exception. It may restart.</p>
+        <pre style="background:#f4f4f4; color:red; padding:10px;">${errorDetails}</pre>
+        <p><i>Server Time: ${new Date().toISOString()}</i></p>
+      `
+    }).catch(err => console.error('Failed to send crash email:', err.message));
+  } catch(e) {
+    console.error('Failed invoking email dispatch:', e.message);
+  }
+  
+  // Node.js will continue running because of this handler
 });
 
 // Start server

@@ -5,8 +5,8 @@
   "license": "MIT",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node --max-old-space-size=460 server.js",
+    "dev": "nodemon --max-old-space-size=460 server.js",
     "build": "echo 'No build needed for backend'"
   },
   "dependencies": {

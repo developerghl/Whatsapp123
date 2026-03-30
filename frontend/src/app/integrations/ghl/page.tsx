@@ -81,9 +81,9 @@ export default function GHLIntegrationPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">GoHighLevel Integration</h1>
+              <h1 className="text-3xl font-bold text-gray-900">LeadConnector Integration</h1>
               <p className="mt-1 text-sm text-gray-500">
-                Connect your GoHighLevel account to enable WhatsApp messaging
+                Connect your LeadConnector account to enable WhatsApp messaging
               </p>
             </div>
             <button
@@ -127,7 +127,7 @@ export default function GHLIntegrationPage() {
                 
                 <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
                   <p className="text-sm text-green-800">
-                    ✅ Your GoHighLevel account is successfully connected. You can now create WhatsApp sessions and start messaging.
+                    ✅ Your LeadConnector account is successfully connected. You can now create WhatsApp sessions and start messaging.
                   </p>
                 </div>
               </div>
@@ -140,7 +140,7 @@ export default function GHLIntegrationPage() {
                   <div className="ml-3">
                     <p className="text-sm font-medium text-gray-900">Not Connected</p>
                     <p className="text-sm text-gray-500">
-                      Connect your GoHighLevel account to get started
+                      Connect your LeadConnector account to get started
                     </p>
                   </div>
                 </div>
@@ -158,10 +158,10 @@ export default function GHLIntegrationPage() {
             
             <div className="space-y-6">
               <div>
-                <h3 className="text-md font-medium text-gray-900 mb-2">1. GoHighLevel App Configuration</h3>
+                <h3 className="text-md font-medium text-gray-900 mb-2">1. LeadConnector App Configuration</h3>
                 <div className="bg-gray-50 p-4 rounded-md">
                   <p className="text-sm text-gray-700 mb-2">
-                    In your GoHighLevel marketplace app, configure the following:
+                    In your LeadConnector marketplace app, configure the following:
                   </p>
                   <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                     <li><strong>Redirect URI:</strong> <code className="bg-gray-200 px-1 rounded">{process.env.NEXT_PUBLIC_API_URL}/oauth/callback</code></li>
@@ -175,7 +175,7 @@ export default function GHLIntegrationPage() {
                 <h3 className="text-md font-medium text-gray-900 mb-2">2. Conversations Provider Setup</h3>
                 <div className="bg-gray-50 p-4 rounded-md">
                   <p className="text-sm text-gray-700 mb-2">
-                    In GoHighLevel, set up the Conversations Provider:
+                    In LeadConnector, set up the Conversations Provider:
                   </p>
                   <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                     <li><strong>Provider Name:</strong> WhatsApp Integration</li>
@@ -194,9 +194,9 @@ export default function GHLIntegrationPage() {
                   </p>
                   <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
                     <li>Create a WhatsApp session in the dashboard</li>
-                    <li>Send test messages from GoHighLevel Conversations</li>
+                    <li>Send test messages from LeadConnector Conversations</li>
                     <li>Verify messages appear in your WhatsApp</li>
-                    <li>Test inbound messages from WhatsApp to GoHighLevel</li>
+                    <li>Test inbound messages from WhatsApp to LeadConnector</li>
                   </ul>
                 </div>
               </div>

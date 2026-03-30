@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Octendr - WhatsApp GHL Integration",
-  description: "Professional WhatsApp to GoHighLevel Integration Platform by Octendr",
+  description: "Professional WhatsApp to LeadConnector Integration Platform by Octendr",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",

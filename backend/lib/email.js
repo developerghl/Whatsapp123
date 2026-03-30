@@ -9,6 +9,82 @@ class EmailService {
   }
 
   /**
+   * Send daily connection lost email notification
+   * @param {string} userId - User ID
+   * @param {string} locationId - GHL Location ID
+   */
+  async sendDailyDisconnectReminder(userId, locationId) {
+    try {
+      console.log(`📧 Preparing daily disconnect reminder for user: ${userId}, location: ${locationId}`);
+
+      // Get user email from database
+      const { data: user, error: userError } = await this.supabaseAdmin
+        .from('users')
+        .select('id, email, name')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (userError || !user || !user.email) {
+        console.error('❌ Failed to fetch user email:', userError || 'No email');
+        return { success: false, error: 'User email not found' };
+      }
+
+      const userName = user.name || user.email.split('@')[0];
+      const subject = 'Action Required: WhatsApp is Disconnected';
+      
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <style>
+              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; margin: 0; padding: 0; }
+              .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+              .header { background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%); padding: 30px; text-align: center; color: white; }
+              .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+              .content { padding: 40px 30px; }
+              .h2 { color: #1f2937; font-size: 20px; font-weight: 600; margin-top: 0; margin-bottom: 20px; }
+              .p { color: #4b5563; font-size: 16px; margin-bottom: 20px; }
+              .warning-box { background-color: #FFF3E0; border-left: 4px solid #FF9800; padding: 15px; margin: 25px 0; border-radius: 4px; }
+              .warning-text { color: #E65100; font-size: 15px; margin: 0; font-weight: 500; }
+              .button-container { text-align: center; margin: 35px 0; }
+              .button { background-color: #1a73e8; color: #ffffff; display: inline-block; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; transition: background-color 0.3s; }
+              .footer { background-color: #f9fafb; padding: 30px; text-align: center; border-top: 1px solid #e5e7eb; }
+              .footer-text { color: #6b7280; font-size: 14px; margin: 0; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>WhatsApp Connection Lost</h1>
+              </div>
+              <div class="content">
+                <h2 class="h2">Hello ${userName},</h2>
+                <p class="p">This is a daily reminder that your WhatsApp connection for Location ID <strong>${locationId}</strong> is currently <strong>disconnected</strong>.</p>
+                <div class="warning-box">
+                  <p class="warning-text">⚠️ Your scheduled drip messages and automatic replies for this location are paused and will not send until you reconnect.</p>
+                </div>
+                <p class="p">Please log into your dashboard and scan the QR code from your WhatsApp mobile app to restore the connection.</p>
+                <div class="button-container">
+                  <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://app.octendr.com'}" class="button">Log In to Reconnect</a>
+                </div>
+              </div>
+              <div class="footer">
+                <p class="footer-text">This is an automated daily reminder from Octendr.</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+
+      return await this.sendEmail(user.email, subject, htmlContent);
+    } catch (error) {
+      console.error('❌ Error in sendDailyDisconnectReminder:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Send connection lost email notification to user
    * Emails are sent for 3 scenarios:
    * 1. Mobile logout (user logs out from phone)
@@ -998,7 +1074,7 @@ This is an automated notification from Octendr.
                 
                 <p><strong>What's Next?</strong></p>
                 <ul style="color: #54656F; line-height: 1.8;">
-                  <li>Add and manage your GoHighLevel subaccounts</li>
+                  <li>Add and manage your LeadConnector subaccounts</li>
                   <li>Connect WhatsApp Business accounts</li>
                   <li>Start sending and receiving messages</li>
                   <li>Access all premium features</li>
@@ -1037,7 +1113,7 @@ Subaccounts: ${user.max_subaccounts || 0} allowed
 Status: Active
 
 What's Next?
-- Add and manage your GoHighLevel subaccounts
+- Add and manage your LeadConnector subaccounts
 - Connect WhatsApp Business accounts
 - Start sending and receiving messages
 - Access all premium features
