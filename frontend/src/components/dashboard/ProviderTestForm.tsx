@@ -10,7 +10,7 @@ interface ProviderTestFormProps {
 export default function ProviderTestForm({ ghlLocationId }: ProviderTestFormProps) {
   const [testData, setTestData] = useState({
     phone: '923001234567',
-    message: 'Test message from GHL integration',
+    message: 'Test message from LeadConnector integration',
     attachments: ''
   });
   const [isTesting, setIsTesting] = useState(false);
@@ -54,7 +54,7 @@ export default function ProviderTestForm({ ghlLocationId }: ProviderTestFormProp
     <div className="bg-white rounded-lg shadow p-6">
       <h3 className="text-lg font-medium text-gray-900 mb-4">Provider Test</h3>
       <p className="text-sm text-gray-600 mb-4">
-        Test the GHL Conversations Provider integration by sending a test message.
+        Test the LeadConnector Conversations Provider integration by sending a test message.
       </p>
 
       <div className="space-y-4">

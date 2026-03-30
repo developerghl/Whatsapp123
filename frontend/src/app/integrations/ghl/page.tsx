@@ -30,12 +30,12 @@ export default function GHLIntegrationPage() {
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching GHL account:', error);
+        console.error('Error fetching LeadConnector account:', error);
       } else {
         setGhlAccount(data);
       }
     } catch (error) {
-      console.error('Error fetching GHL account:', error);
+      console.error('Error fetching LeadConnector account:', error);
     }
   }, [user]);
 
@@ -209,7 +209,7 @@ export default function GHLIntegrationPage() {
             
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-2">Outbound (GHL → WhatsApp)</h3>
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Outbound (LeadConnector → WhatsApp)</h3>
                 <div className="bg-gray-50 p-3 rounded-md">
                   <code className="text-sm text-gray-700">
                     POST {process.env.NEXT_PUBLIC_API_URL}/ghl/provider-outbound

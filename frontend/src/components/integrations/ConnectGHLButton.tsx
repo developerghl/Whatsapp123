@@ -47,7 +47,7 @@ export default function ConnectGHLButton({ onConnected, className = '' }: Connec
       }, 1000);
 
     } catch (error) {
-      console.error('Error connecting to GHL:', error);
+      console.error('Error connecting to LeadConnector:', error);
       setIsConnecting(false);
     }
   };

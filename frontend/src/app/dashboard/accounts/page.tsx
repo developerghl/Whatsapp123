@@ -137,7 +137,7 @@ export default function AccountsPage() {
         setSubaccountStatuses([])
       }
     } catch (error) {
-      console.error('Error fetching GHL locations:', error)
+      console.error('Error fetching LeadConnector locations:', error)
       setSubaccountStatuses([])
     } finally {
       setLoading(false)
@@ -360,7 +360,7 @@ export default function AccountsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">GHL Accounts</h1>
+          <h1 className="text-3xl font-bold text-gray-900">LeadConnector locations</h1>
           <p className="text-gray-600 mt-1">Manage your LeadConnector WhatsApp integrations</p>
         </div>
         <div className="flex items-center space-x-3">
@@ -461,7 +461,7 @@ export default function AccountsPage() {
                             </div>
                             <div>
                               <p className="text-sm font-semibold text-gray-900">{account.ghl_location_id}</p>
-                              <p className="text-xs text-gray-500">GHL Location</p>
+                              <p className="text-xs text-gray-500">Location ID</p>
                             </div>
                           </div>
                         </td>

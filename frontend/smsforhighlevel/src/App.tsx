@@ -94,7 +94,7 @@ export default function App() {
           <h1 className="font-display text-5xl lg:text-[5.5rem] font-bold tracking-tight text-slate-900 mb-6 leading-[1.05]">
             Smarter SMS.<br/>
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
-              Built for HighLevel.
+              Built for LeadConnector.
             </span>
           </h1>
 
@@ -104,7 +104,7 @@ export default function App() {
 
           <div className="space-y-4">
             {[
-              "Native HighLevel integration",
+              "Native LeadConnector integration",
               "Advanced conversational AI routing",
               "Zero-code automation builder"
             ].map((bullet, i) => (
@@ -128,7 +128,7 @@ export default function App() {
                 <motion.div key="form-content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 0.98 }} className="relative z-10">
                   <div className="mb-10">
                     <h2 className="text-2xl lg:text-3xl font-bold text-slate-900 mb-3 font-display">Get Early Access</h2>
-                    <p className="text-slate-500 text-sm lg:text-base">Join the waitlist to be the first to experience the future of HighLevel SMS.</p>
+                    <p className="text-slate-500 text-sm lg:text-base">Join the waitlist to be the first to experience the future of LeadConnector SMS.</p>
                   </div>
 
                   <form onSubmit={handleSubmit} className="space-y-6">
@@ -168,7 +168,7 @@ export default function App() {
                   </motion.div>
                   <h3 className="text-3xl font-bold text-slate-900 mb-4 font-display">You're on the list!</h3>
                   <p className="text-slate-500 text-lg max-w-sm mx-auto">
-                    Thanks for your interest. We'll notify you as soon as we launch SMSforHighLevel.
+                    Thanks for your interest. We&apos;ll notify you as soon as we launch SMS for LeadConnector.
                   </p>
                 </motion.div>
               )}

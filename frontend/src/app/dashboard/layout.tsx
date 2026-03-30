@@ -50,7 +50,7 @@ export default function DashboardLayout({
     //   )
     // },
     { 
-      name: 'SMS for HighLevel', 
+      name: 'SMS for LeadConnector', 
       href: '/dashboard/smsforhighlevel', 
       current: pathname === '/dashboard/smsforhighlevel',
       icon: (
@@ -124,7 +124,7 @@ export default function DashboardLayout({
               <img src="/favicon.ico" alt="Octendr" width={40} height={40} className="object-contain" />
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Octendr</h1>
-                <p className="text-xs text-gray-500">WhatsApp GHL Integration</p>
+                <p className="text-xs text-gray-500">WhatsApp for LeadConnector</p>
               </div>
             </div>
 

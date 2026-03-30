@@ -29,7 +29,7 @@ export default function Dashboard() {
     if (!user?.id) return
 
     try {
-      // Fetch GHL accounts
+      // Fetch LeadConnector-linked accounts
       const { data: ghlAccounts } = await supabase
         .from('ghl_accounts')
         .select('id')
@@ -302,7 +302,7 @@ export default function Dashboard() {
               </svg>
             </div>
             <h3 className="text-sm font-semibold text-gray-900 mb-1">Manage Accounts</h3>
-            <p className="text-xs text-gray-500">View and configure your GHL integrations</p>
+            <p className="text-xs text-gray-500">View and configure your LeadConnector integrations</p>
           </Link>
 
           <button
@@ -333,7 +333,7 @@ export default function Dashboard() {
               </svg>
             </div>
             <h3 className="text-sm font-semibold text-gray-900 mb-1">Add Subaccount</h3>
-            <p className="text-xs text-gray-500">Connect a new GHL location</p>
+            <p className="text-xs text-gray-500">Connect a new LeadConnector location</p>
           </button>
 
           <Link

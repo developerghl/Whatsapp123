@@ -22,7 +22,7 @@ export default function GHLIntegration({ }: GHLIntegrationProps) {
     const check = async () => {
       if (!user) return
 
-      // Check if GHL account exists
+      // Check if LeadConnector account row exists
       const { data: acct } = await supabase
         .from('ghl_accounts')
         .select('*')
@@ -45,7 +45,7 @@ export default function GHLIntegration({ }: GHLIntegrationProps) {
         window.open(authUrl, '_blank')
       }
     } catch (error) {
-      console.error('Error connecting to GHL:', error)
+      console.error('Error connecting to LeadConnector:', error)
     } finally {
       setIsConnecting(false)
     }
@@ -54,13 +54,13 @@ export default function GHLIntegration({ }: GHLIntegrationProps) {
 
   return (
     <div className="bg-white shadow rounded-lg p-6">
-      <h3 className="text-lg font-medium text-gray-900 mb-4">GHL Integration</h3>
+      <h3 className="text-lg font-medium text-gray-900 mb-4">LeadConnector integration</h3>
       
       {isGhlUser ? (
         <div className="space-y-4">
           <div className="flex items-center space-x-2">
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-              ✓ Logged in with GHL
+              ✓ Connected to LeadConnector
             </span>
             {ghlAccount && (
               <span className="text-sm text-gray-600">
@@ -69,7 +69,7 @@ export default function GHLIntegration({ }: GHLIntegrationProps) {
             )}
           </div>
           
-          <p className="text-gray-500">Select a GHL subaccount below to get started</p>
+          <p className="text-gray-500">Select a location below to get started</p>
         </div>
       ) : (
         <div className="space-y-4">

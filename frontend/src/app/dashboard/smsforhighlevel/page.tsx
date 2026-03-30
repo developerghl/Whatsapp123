@@ -114,7 +114,7 @@ export default function SMSforHighLevelPage() {
           <h1 className="text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 mb-6 leading-tight">
             Smarter SMS.<br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
-              Built for HighLevel.
+              Built for LeadConnector.
             </span>
           </h1>
 
@@ -126,7 +126,7 @@ export default function SMSforHighLevelPage() {
           {/* Bullets */}
           <div className="space-y-4">
             {[
-              'Native HighLevel integration',
+              'Native LeadConnector integration',
               'Advanced conversational AI routing',
               'Zero-code automation builder',
             ].map((bullet, i) => (
@@ -169,7 +169,7 @@ export default function SMSforHighLevelPage() {
                   <div className="mb-8">
                     <h2 className="text-2xl font-bold text-slate-900 mb-2">Get Early Access</h2>
                     <p className="text-slate-500 text-sm">
-                      Join the waitlist to be the first to experience the future of HighLevel SMS.
+                      Join the waitlist to be the first to experience the future of LeadConnector SMS.
                     </p>
                   </div>
 
@@ -234,7 +234,7 @@ export default function SMSforHighLevelPage() {
                   </motion.div>
                   <h3 className="text-3xl font-bold text-slate-900 mb-4">You&apos;re on the list!</h3>
                   <p className="text-slate-500 text-lg max-w-sm mx-auto">
-                    Thanks for your interest. We&apos;ll notify you as soon as we launch SMSforHighLevel.
+                    Thanks for your interest. We&apos;ll notify you as soon as we launch SMS for LeadConnector.
                   </p>
                 </motion.div>
               )}

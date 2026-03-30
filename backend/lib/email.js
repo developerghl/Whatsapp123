@@ -77,7 +77,27 @@ class EmailService {
         </html>
       `;
 
-      return await this.sendEmail(user.email, subject, htmlContent);
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.octendr.com';
+      const textContent = [
+        `Hello ${userName},`,
+        '',
+        `This is a daily reminder that your WhatsApp connection for Location ID ${locationId} is currently disconnected.`,
+        '',
+        'Your scheduled drip messages and automatic replies for this location are paused until you reconnect.',
+        '',
+        'Please log into your dashboard and scan the QR code from your WhatsApp mobile app.',
+        '',
+        `Log in: ${appUrl}`,
+        '',
+        'This is an automated daily reminder from Octendr.',
+      ].join('\n');
+
+      return await this.sendEmailViaAPI({
+        to: user.email,
+        subject,
+        html: htmlContent,
+        text: textContent,
+      });
     } catch (error) {
       console.error('❌ Error in sendDailyDisconnectReminder:', error);
       return { success: false, error: error.message };

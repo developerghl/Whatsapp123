@@ -42,7 +42,7 @@ export default function GHLLocationSelector({ onLocationSelect }: GHLLocationSel
       const data = await response.json();
       setLocations(data.locations || []);
     } catch (error) {
-      console.error('Error fetching GHL locations:', error);
+      console.error('Error fetching LeadConnector locations:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch locations');
     } finally {
       setLoading(false);
@@ -56,7 +56,7 @@ export default function GHLLocationSelector({ onLocationSelect }: GHLLocationSel
   if (loading) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">GHL Locations</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-4">LeadConnector locations</h3>
         <div className="animate-pulse">
           <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
           <div className="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -68,7 +68,7 @@ export default function GHLLocationSelector({ onLocationSelect }: GHLLocationSel
   if (error) {
     return (
       <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">GHL Locations</h3>
+        <h3 className="text-lg font-medium text-gray-900 mb-4">LeadConnector locations</h3>
         <div className="p-4 bg-red-50 border border-red-200 rounded-md">
           <p className="text-sm text-red-800">{error}</p>
           <button
@@ -85,7 +85,7 @@ export default function GHLLocationSelector({ onLocationSelect }: GHLLocationSel
   return (
     <div className="bg-white rounded-lg shadow p-6">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-medium text-gray-900">GHL Locations</h3>
+        <h3 className="text-lg font-medium text-gray-900">LeadConnector locations</h3>
         <button
           onClick={fetchLocations}
           className="px-3 py-1 text-xs font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200"
@@ -96,7 +96,7 @@ export default function GHLLocationSelector({ onLocationSelect }: GHLLocationSel
 
       {locations.length === 0 ? (
         <div className="text-center py-8">
-          <p className="text-gray-500 text-sm">No locations found in your GHL account</p>
+          <p className="text-gray-500 text-sm">No locations found in your LeadConnector account</p>
         </div>
       ) : (
         <div className="space-y-3">

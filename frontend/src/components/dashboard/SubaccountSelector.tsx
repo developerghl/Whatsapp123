@@ -51,12 +51,12 @@ export default function SubaccountSelector({
   return (
     <div className="bg-white shadow rounded-lg p-6">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-medium text-gray-900">GHL Subaccounts</h3>
+        <h3 className="text-lg font-medium text-gray-900">LeadConnector locations</h3>
       </div>
 
       <div className="space-y-2">
         {subaccounts.length === 0 ? (
-          <p className="text-gray-500 text-sm">No GHL subaccounts found. Connect your GHL account first.</p>
+          <p className="text-gray-500 text-sm">No locations found. Connect your LeadConnector account first.</p>
         ) : (
           subaccounts.map((subaccount) => (
             <div

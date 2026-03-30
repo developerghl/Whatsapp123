@@ -83,7 +83,7 @@ body {
   background: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
 }
 
-/* GHL gradient */
+/* LeadConnector accent gradient (legacy class name: ghl-gradient) */
 .ghl-gradient {
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
 }

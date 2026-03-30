@@ -1428,17 +1428,14 @@ app.get('/oauth/callback', async (req, res) => {
 
     if (!state) {
       console.log('⚠️ No state parameter - marketplace install flow');
-      // Code is still valid! Redirect to frontend to get user context
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
       return res.redirect(
         `${frontendUrl}/auth/callback?code=${encodeURIComponent(code)}&locationId=${encodeURIComponent(locationId || '')}&marketplace_install=true`
       );
     }
 
-    // Don't require locationId in query - GHL may provide it in token response
     console.log('Proceeding with token exchange...');
 
-    // Exchange code for access token
     const tokenResponse = await fetch('https://services.leadconnectorhq.com/oauth/token', {
       method: 'POST',
       headers: {
@@ -1450,7 +1447,7 @@ app.get('/oauth/callback', async (req, res) => {
         client_secret: GHL_CLIENT_SECRET,
         grant_type: 'authorization_code',
         code: code,
-        user_type: 'Location', // Required by GHL OAuth 2.0
+        user_type: 'Location',
         redirect_uri: GHL_REDIRECT_URI
       })
     });
@@ -1478,15 +1475,12 @@ app.get('/oauth/callback', async (req, res) => {
       userId: tokenData.userId
     });
 
-    // Use state as target user ID (passed from frontend)
-    // Only logged-in users can add subaccounts
     let targetUserId = null;
 
     try {
       targetUserId = decodeURIComponent(state);
       console.log('Using target user ID from state:', targetUserId);
 
-      // Check if user exists (must be existing user from login)
       const { data: existingUser, error: userCheckError } = await supabaseAdmin
         .from('users')
         .select('id, name, email')
@@ -1507,7 +1501,6 @@ app.get('/oauth/callback', async (req, res) => {
       }
 
       console.log('✅ Existing user found:', existingUser);
-
     } catch (e) {
       console.error('Error decoding state:', e);
       return res.status(400).json({
@@ -1907,12 +1900,10 @@ app.get('/oauth/callback', async (req, res) => {
     console.log('🔍 User data for redirect:', { userData, userError, targetUserId });
 
     if (userData) {
-      // Redirect to dashboard with success message
       console.log('✅ Redirecting with user data:', userData);
       res.redirect(`${frontendUrl}/dashboard?success=account_added`);
     } else {
       console.error('❌ User not found for redirect:', userError);
-      // Fallback redirect to dashboard
       res.redirect(`${frontendUrl}/dashboard?success=account_added`);
     }
 
@@ -4093,7 +4084,7 @@ app.get('/ghl/provider/status', async (req, res) => {
       .maybeSingle();
 
     if (!ghlAccount) {
-      return res.json({ status: 'disconnected', message: 'GHL account not found' });
+      return res.json({ status: 'disconnected', message: 'LeadConnector location not linked yet' });
     }
 
     const { data: session } = await supabaseAdmin
@@ -4130,16 +4121,16 @@ app.get('/ghl/provider', async (req, res) => {
 
     let { locationId, companyId } = req.query;
 
-    // 🔥 CRITICAL: Try to extract locationId from referer URL FIRST (GHL context)
+    // 🔥 CRITICAL: Try to extract locationId from referer URL FIRST (LeadConnector / CRM context)
     // This is the PRIMARY source - URL se jo locationId aaye, wahi use karo
     if (!locationId) {
       const referer = req.get('referer') || '';
       console.log('🔍 Checking referer URL for locationId:', referer);
 
-      // Extract locationId from GHL URLs like: 
-      // https://app.gohighlevel.com/v2/location/5iODXOPij0pdXOyIEIQi/custom-menu-link/...
-      // https://app.gohighlevel.com/locations/LOCATION_ID/...
-      // https://app.gohighlevel.com/location/LOCATION_ID/...
+      // Extract locationId from CRM URLs (LeadConnector / whitelabel domains), e.g.:
+      // .../v2/location/LOCATION_ID/...
+      // .../locations/LOCATION_ID/...
+      // .../location/LOCATION_ID/...
       const locationPatterns = [
         /\/v2\/location\/([a-zA-Z0-9_-]+)/,    // v2/location/LOCATION_ID pattern (PRIORITY)
         /\/location\/([a-zA-Z0-9_-]+)/,        // location/LOCATION_ID pattern
@@ -4281,7 +4272,7 @@ app.get('/ghl/provider', async (req, res) => {
               <div class="code-block" style="margin-top: 10px;">
                 ${process.env.BACKEND_URL || 'https://api.octendr.com'}/ghl/provider
               </div>
-              This will automatically detect your location when opened from GHL.
+              This will automatically detect your location when opened from LeadConnector.
             </p>
           </div>
         </body>
@@ -4909,7 +4900,7 @@ app.get('/admin/ghl/locations', async (req, res) => {
 
     if (ghlError || !ghlAccounts || ghlAccounts.length === 0) {
       console.error('GHL account lookup error:', ghlError);
-      return res.status(404).json({ error: 'GHL account not found. Please connect your GHL account first.' });
+      return res.status(404).json({ error: 'No LeadConnector location linked. Connect a location from the Octendr dashboard first.' });
     }
 
     console.log(`📊 Found ${ghlAccounts.length} GHL account(s) for user ${userId}`);

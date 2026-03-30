@@ -219,10 +219,10 @@ export default function SubaccountSettingsModal({
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <label className="text-sm font-semibold text-gray-900 block mb-2">
-                    Create Contact in GHL
+                    Create contact in LeadConnector
                   </label>
                   <p className="text-sm text-gray-600 leading-relaxed">
-                    When enabled, new contacts are automatically created in GHL when they send WhatsApp messages.
+                    When enabled, new contacts are automatically created in LeadConnector when they send WhatsApp messages.
                     When disabled, messages are only synced if the contact already exists.
                   </p>
                 </div>

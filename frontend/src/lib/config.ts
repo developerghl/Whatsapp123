@@ -3,7 +3,7 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api
 
 // API endpoints
 export const API_ENDPOINTS = {
-  // GHL endpoints
+  // LeadConnector integration (URL paths unchanged for API compatibility)
   connectSubaccount: `${API_BASE_URL}/admin/ghl/connect-subaccount`,
   getSubaccounts: `${API_BASE_URL}/admin/ghl/subaccounts`,
   createSubaccount: `${API_BASE_URL}/admin/ghl/create-subaccount`,

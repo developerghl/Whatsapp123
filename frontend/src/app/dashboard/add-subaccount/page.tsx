@@ -154,7 +154,7 @@ export default function AddSubAccount() {
         toast.showToast({
           type: 'error',
           title: 'Login Required',
-          message: 'Please login first to add your GHL account'
+          message: 'Please log in to Octendr first to connect a LeadConnector location'
         })
         setLoading(false)
         return
@@ -223,19 +223,19 @@ export default function AddSubAccount() {
         return
       }
 
-      // GHL OAuth configuration
+      // LeadConnector marketplace OAuth (authorize URL is hosted by the platform)
       const GHL_CLIENT_ID = process.env.NEXT_PUBLIC_GHL_CLIENT_ID || 'YOUR_CLIENT_ID'
       const BACKEND_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.octendr.com'
       const REDIRECT_URI = `${BACKEND_URL}/oauth/callback`
       const SCOPES = 'locations.readonly conversations.write conversations.readonly conversations/message.readonly conversations/message.write contacts.readonly contacts.write businesses.readonly users.readonly medias.write'
       
-      // Direct GHL OAuth URL with user ID in state parameter
+      // OAuth URL with Octendr user id in state (dashboard flow)
       const ghlOAuthUrl = `https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&state=${encodeURIComponent(user.id)}`
       
-      console.log('📍 Direct GHL OAuth redirect with user ID:', user.id)
+      console.log('📍 LeadConnector OAuth redirect with user ID:', user.id)
       console.log('🔗 OAuth URL:', ghlOAuthUrl)
       
-      // Direct redirect to GHL marketplace (NO backend HTTP call)
+      // Direct redirect to app marketplace authorize URL
       window.location.href = ghlOAuthUrl
       
     } catch (error) {

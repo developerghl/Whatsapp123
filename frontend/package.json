@@ -1,6 +1,7 @@
 {
   "name": "octendr",
   "version": "1.0.1",
+  "description": "WhatsApp messaging for LeadConnector — connect each location, automate replies, and keep conversations in your CRM.",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack -p 3001",
