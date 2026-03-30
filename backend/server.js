@@ -56,6 +56,9 @@ const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID;
 const GHL_CLIENT_SECRET = process.env.GHL_CLIENT_SECRET;
 const GHL_REDIRECT_URI = process.env.GHL_REDIRECT_URI;
 const GHL_SCOPES = process.env.GHL_SCOPES || 'locations.readonly conversations.write conversations.readonly conversations/message.readonly conversations/message.write contacts.readonly contacts.write businesses.readonly users.readonly medias.write';
+// Marketplace OAuth consent screen (grey-label). Fallback: gohighlevel.com still works if LC URL fails in your region.
+const LC_MARKETPLACE_AUTHORIZE_URL =
+  process.env.LC_MARKETPLACE_AUTHORIZE_URL || 'https://marketplace.leadconnectorhq.com/oauth/chooselocation';
 
 // Stripe configuration
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, {
@@ -365,7 +368,13 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https://services.leadconnectorhq.com"],
-      frameSrc: ["'self'", "https://app.gohighlevel.com", "https://*.gohighlevel.com"],
+      frameSrc: [
+        "'self'",
+        'https://app.gohighlevel.com',
+        'https://*.gohighlevel.com',
+        'https://app.leadconnectorhq.com',
+        'https://*.leadconnectorhq.com',
+      ],
       // Permanent solution for whitelabel domains - Allow all origins (required for GHL whitelabel functionality)
       frameAncestors: ["*"]
     }
@@ -390,6 +399,7 @@ app.use(cors({
       'https://whatsapghl.vercel.app',
       'https://whatsanghl.vercel.app',
       'https://app.gohighlevel.com',
+      'https://app.leadconnectorhq.com',
       'https://dashboard.octendr.com',
       'https://api.octendr.com'
     ];
@@ -399,6 +409,7 @@ app.use(cors({
       origin.endsWith('.vercel.app') ||
       origin.endsWith('.onrender.com') ||
       origin.endsWith('.gohighlevel.com') ||
+      origin.endsWith('.leadconnectorhq.com') ||
       origin.endsWith('.octendr.com');
 
     if (isAllowed) {
@@ -1404,10 +1415,10 @@ app.get('/auth/ghl/connect', (req, res) => {
   // If userId provided, pass it in state parameter
   let authUrl;
   if (userId) {
-    authUrl = `https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}&state=${encodeURIComponent(userId)}`;
+    authUrl = `${LC_MARKETPLACE_AUTHORIZE_URL}?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}&state=${encodeURIComponent(userId)}`;
   } else {
     // No state parameter - backend will create simple user
-    authUrl = `https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}`;
+    authUrl = `${LC_MARKETPLACE_AUTHORIZE_URL}?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}`;
   }
 
   console.log('🔗 GHL OAuth redirect:', { userId, hasState: !!userId });
@@ -2661,7 +2672,7 @@ app.post('/admin/ghl/connect-subaccount', requireAuth, async (req, res) => {
 
     // DEPRECATED: Use OAuth callback flow instead
     // Generate GHL OAuth URL for this specific location
-    const authUrl = `https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}&state=${encodeURIComponent(req.user.id)}`;
+    const authUrl = `${LC_MARKETPLACE_AUTHORIZE_URL}?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}&state=${encodeURIComponent(req.user.id)}`;
 
     return res.json({
       success: false,
@@ -2717,7 +2728,7 @@ async function downloadGHLMedia(mediaUrl, accessToken) {
         'Version': '2021-07-28', // GHL API version - required
         'User-Agent': 'WhatsApp-Bridge/1.0',
         'Accept': '*/*',
-        'Referer': 'https://app.gohighlevel.com/'
+        'Referer': 'https://app.leadconnectorhq.com/'
       },
       timeout: 60000 // 60 second timeout for large files
     });
@@ -7937,7 +7948,7 @@ process.on('uncaughtException', (error) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`GHL OAuth URL: https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}`);
+  console.log(`Marketplace OAuth URL: ${LC_MARKETPLACE_AUTHORIZE_URL}?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(GHL_REDIRECT_URI)}&scope=${encodeURIComponent(GHL_SCOPES)}`);
 
   if (!process.env.JWT_SECRET) {
     console.error('❌ FATAL: JWT_SECRET not set — authentication will fail!');

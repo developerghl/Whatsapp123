@@ -230,7 +230,10 @@ export default function AddSubAccount() {
       const SCOPES = 'locations.readonly conversations.write conversations.readonly conversations/message.readonly conversations/message.write contacts.readonly contacts.write businesses.readonly users.readonly medias.write'
       
       // OAuth URL with Octendr user id in state (dashboard flow)
-      const ghlOAuthUrl = `https://marketplace.gohighlevel.com/oauth/chooselocation?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&state=${encodeURIComponent(user.id)}`
+      const authorizeBase =
+        process.env.NEXT_PUBLIC_LC_MARKETPLACE_AUTHORIZE_URL ||
+        'https://marketplace.leadconnectorhq.com/oauth/chooselocation'
+      const ghlOAuthUrl = `${authorizeBase}?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&state=${encodeURIComponent(user.id)}`
       
       console.log('📍 LeadConnector OAuth redirect with user ID:', user.id)
       console.log('🔗 OAuth URL:', ghlOAuthUrl)
