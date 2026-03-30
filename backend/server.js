@@ -7800,7 +7800,6 @@ setInterval(() => {
 
 // Global error handlers to prevent server crashes
 const adminEmailReceiver = process.env.ADMIN_EMAIL || 'support@octendr.com'; // Change to your actual admin email later or env 
-const emailService = require('./lib/email');
 
 // --- Daily Disconnect Checking Logic ---
 const fs = require('fs');
