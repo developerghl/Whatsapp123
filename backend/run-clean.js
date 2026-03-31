@@ -7,7 +7,7 @@ async function cleanDBNow() {
     const supabaseTracker = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     
     const date24hAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const date7DaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const date15DaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
     
     // 1. Delete abandoned QR scans
     console.log(`🗑️ Deleting abandoned QR ghosts (NULL numbers) older than ${date24hAgo}...`);
@@ -20,15 +20,15 @@ async function cleanDBNow() {
     if (err1) throw err1;
     console.log(`✅ Deleted abandoned sessions: ${count1 || 0} rows`);
 
-    // 2. Delete completely dead numbers older than 7 days
-    console.log(`🗑️ Deleting 7-day old dead sessions older than ${date7DaysAgo}...`);
+    // 2. Delete disconnected sessions older than 15 days (aligns with daily reminder window)
+    console.log(`🗑️ Deleting disconnected sessions older than ${date15DaysAgo}...`);
     const { count: count2, error: err2 } = await supabaseTracker.from('sessions')
       .delete({ count: 'exact' })
       .eq('status', 'disconnected')
-      .lt('created_at', date7DaysAgo);
+      .lt('created_at', date15DaysAgo);
       
     if (err2) throw err2;
-    console.log(`✅ Deleted 7-day old dead sessions: ${count2 || 0} rows`);
+    console.log(`✅ Deleted 15-day-old disconnected sessions: ${count2 || 0} rows`);
 
     console.log('🎉 Database Cleanup Complete!');
     process.exit(0);

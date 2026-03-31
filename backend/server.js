@@ -7818,7 +7818,8 @@ async function checkDailyDisconnectedAccounts() {
     try {
       console.log('🧹 Running Auto-Clean for dead WhatsApp sessions...');
       const date24hAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const date7DaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      // 15 days: daily disconnect emails may run for a while; avoid deleting rows before user has time to reconnect
+      const date15DaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString();
       
       // 1. Delete abandoned QR scan ghosts (NULL phone numbers > 24 hours old)
       const { error: err1 } = await supabaseTracker.from('sessions')
@@ -7827,14 +7828,14 @@ async function checkDailyDisconnectedAccounts() {
         .is('phone_number', null)
         .lt('created_at', date24hAgo);
         
-      // 2. Delete ALL disconnected sessions older than 7 days
+      // 2. Delete disconnected sessions older than 15 days (by created_at)
       const { error: err2 } = await supabaseTracker.from('sessions')
         .delete()
         .eq('status', 'disconnected')
-        .lt('created_at', date7DaysAgo);
+        .lt('created_at', date15DaysAgo);
         
       if (err1) console.error('Warning cleaning abandoned QR sessions:', err1.message);
-      if (err2) console.error('Warning cleaning 7-day old sessions:', err2.message);
+      if (err2) console.error('Warning cleaning 15-day-old disconnected sessions:', err2.message);
     } catch (cleanErr) {
       console.error('❌ Auto-Clean failed:', cleanErr.message);
     }
