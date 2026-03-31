@@ -101,8 +101,8 @@ export default function DashboardLayout({
       )
     },
     { 
-      name: 'SMS', 
-      href: '/dashboard/smsforhighlevel', 
+      name: 'Agency SMS',
+      href: '/dashboard/smsforhighlevel',
       current: pathname === '/dashboard/smsforhighlevel',
       icon: (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

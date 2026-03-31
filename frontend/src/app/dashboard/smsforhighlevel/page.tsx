@@ -100,20 +100,20 @@ export default function SMSforHighLevelPage() {
             </div>
 
             <h1 className="text-4xl lg:text-5xl font-bold tracking-tight text-slate-900 mb-6 leading-tight">
-              Smarter SMS.
+              Smarter SMS for your agency.
               <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
-                Built for Octendr.
+                Every subaccount, one workflow.
               </span>
             </h1>
 
             <p className="text-base lg:text-lg text-slate-500 mb-10 leading-relaxed font-medium">
-              Automate conversations, increase response rates, and scale your workflows effortlessly.
+              Automate conversations across your agency and subaccounts, lift response rates, and scale workflows without extra overhead.
             </p>
 
             <div className="space-y-4">
               {[
-                'Built for agencies and subaccounts',
+                'Agency-wide visibility, per-subaccount control',
                 'Advanced conversational AI routing',
                 'Zero-code automation builder',
               ].map((bullet, i) => (
@@ -146,11 +146,10 @@ export default function SMSforHighLevelPage() {
                   Get Early Access
                 </h2>
                 <h3 className="text-base sm:text-lg font-semibold text-slate-800 mb-2">
-                  Join the waitlist for Octendr SMS
+                  Join the waitlist for agency SMS on Octendr
                 </h3>
                 <p className="text-sm sm:text-[15px] text-slate-500 leading-relaxed max-w-md">
-                  Tell us how to reach you—we&apos;ll notify you when SMS automation goes live. No spam;
-                  you can unsubscribe anytime.
+                  Tell us how to reach you—we&apos;ll notify you when SMS automation is available for your agency and subaccounts. No spam; you can unsubscribe anytime.
                 </p>
               </div>
 
