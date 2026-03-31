@@ -57,7 +57,7 @@ function BackgroundBubbles({ mouseX, mouseY }: { mouseX: number; mouseY: number 
   )
 }
 
-export default function SMSforHighLevelPage() {
+export default function AgencySmsPage() {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -84,7 +84,6 @@ export default function SMSforHighLevelPage() {
         <BackgroundBubbles mouseX={mousePos.x} mouseY={mousePos.y} />
 
         <div className="relative z-10 w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-start lg:items-center">
-          {/* LEFT: same Coming Soon marketing */}
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
@@ -133,7 +132,6 @@ export default function SMSforHighLevelPage() {
             </div>
           </motion.div>
 
-          {/* RIGHT: copy block → Octane embed */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -181,7 +179,10 @@ export default function SMSforHighLevelPage() {
                       data-height="412"
                       data-layout-iframe-id="inline-Q1zTYoreoNcKsRSeZm8V"
                       data-form-id="Q1zTYoreoNcKsRSeZm8V"
-                      title="Form 4"
+                      title="Octendr SMS waitlist"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      allow="clipboard-write"
                     />
                   </div>
                 </div>
