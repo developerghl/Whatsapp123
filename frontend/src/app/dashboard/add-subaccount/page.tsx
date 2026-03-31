@@ -154,7 +154,7 @@ export default function AddSubAccount() {
         toast.showToast({
           type: 'error',
           title: 'Login Required',
-          message: 'Please log in to Octendr first to connect a LeadConnector location'
+          message: 'Please log in to Octendr first to connect a subaccount.'
         })
         setLoading(false)
         return
@@ -223,7 +223,7 @@ export default function AddSubAccount() {
         return
       }
 
-      // LeadConnector marketplace OAuth (authorize URL is hosted by the platform)
+      // Marketplace OAuth (authorize URL is hosted by the platform)
       const GHL_CLIENT_ID = process.env.NEXT_PUBLIC_GHL_CLIENT_ID || 'YOUR_CLIENT_ID'
       const BACKEND_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.octendr.com'
       const REDIRECT_URI = `${BACKEND_URL}/oauth/callback`
@@ -232,10 +232,10 @@ export default function AddSubAccount() {
       // OAuth URL with Octendr user id in state (dashboard flow)
       const authorizeBase =
         process.env.NEXT_PUBLIC_LC_MARKETPLACE_AUTHORIZE_URL ||
-        'https://marketplace.leadconnectorhq.com/oauth/chooselocation'
+        'https://marketplace.gohighlevel.com/oauth/chooselocation'
       const ghlOAuthUrl = `${authorizeBase}?response_type=code&client_id=${GHL_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&state=${encodeURIComponent(user.id)}`
       
-      console.log('📍 LeadConnector OAuth redirect with user ID:', user.id)
+      console.log('📍 Agency OAuth redirect with user ID:', user.id)
       console.log('🔗 OAuth URL:', ghlOAuthUrl)
       
       // Direct redirect to app marketplace authorize URL
@@ -280,8 +280,8 @@ export default function AddSubAccount() {
       )}
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Add Subaccount</h1>
-        <p className="text-gray-600 mt-1">Connect your LeadConnector location to start using WhatsApp</p>
+        <h1 className="text-3xl font-bold text-gray-900">Add a Subaccount</h1>
+        <p className="text-gray-600 mt-1">Connect a subaccount to start using WhatsApp.</p>
       </div>
 
       {paymentRequired && (
@@ -339,9 +339,9 @@ export default function AddSubAccount() {
             </svg>
           </div>
           
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">Connect Location</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">Connect a Subaccount</h2>
           <p className="text-gray-600 mb-8">
-            Connect your LeadConnector location to enable WhatsApp integration
+            Link a subaccount under your agency to enable WhatsApp integration.
           </p>
           
           {/* Limit Warning */}

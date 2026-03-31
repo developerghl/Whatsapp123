@@ -37,7 +37,7 @@ export default function CreateSessionCard({ subaccountId }: CreateSessionCardPro
       setIsCreating(true);
       setError(null);
 
-      // Resolve LeadConnector location id for the subaccount
+      // Resolve GHL location id for the subaccount
       const ghlResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/ghl/subaccounts`, {
         credentials: 'include', // Send auth cookie
       });
@@ -50,7 +50,7 @@ export default function CreateSessionCard({ subaccountId }: CreateSessionCardPro
       const subaccount = subaccounts.find((acc: Subaccount) => acc.id === subaccountId);
       
       if (!subaccount) {
-        throw new Error('LeadConnector location not found');
+        throw new Error('Subaccount location not found');
       }
 
       // Open backend provider page with mode parameter

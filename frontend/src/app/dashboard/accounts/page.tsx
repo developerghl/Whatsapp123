@@ -107,7 +107,7 @@ export default function AccountsPage() {
               
               return {
                 id: ghlAccount.id,
-                name: `Location ${ghlAccount.location_id}`,
+                name: `Subaccount ${ghlAccount.location_id}`,
                 ghl_location_id: ghlAccount.location_id,
                 status: (sessionData.status as 'initializing' | 'qr' | 'ready' | 'disconnected' | 'none') || 'none',
                 phone_number: sessionData.phone_number || undefined,
@@ -121,7 +121,7 @@ export default function AccountsPage() {
               console.error('Error fetching session status:', error)
               return {
                 id: ghlAccount.id,
-                name: `Location ${ghlAccount.location_id}`,
+                name: `Subaccount ${ghlAccount.location_id}`,
                 ghl_location_id: ghlAccount.location_id,
                 status: 'none' as const,
                 created_at: ghlAccount.created_at
@@ -137,7 +137,7 @@ export default function AccountsPage() {
         setSubaccountStatuses([])
       }
     } catch (error) {
-      console.error('Error fetching LeadConnector locations:', error)
+      console.error('Error fetching account locations:', error)
       setSubaccountStatuses([])
     } finally {
       setLoading(false)
@@ -360,8 +360,8 @@ export default function AccountsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">LeadConnector locations</h1>
-          <p className="text-gray-600 mt-1">Manage your LeadConnector WhatsApp integrations</p>
+          <h1 className="text-3xl font-bold text-gray-900">Agency Subaccounts</h1>
+          <p className="text-gray-600 mt-1">Manage WhatsApp for each subaccount under your agency.</p>
         </div>
         <div className="flex items-center space-x-3">
           <button

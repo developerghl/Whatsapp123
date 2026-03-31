@@ -29,7 +29,7 @@ export default function Dashboard() {
     if (!user?.id) return
 
     try {
-      // Fetch LeadConnector-linked accounts
+      // Fetch agency subaccounts (GHL accounts)
       const { data: ghlAccounts } = await supabase
         .from('ghl_accounts')
         .select('id')
@@ -141,7 +141,7 @@ export default function Dashboard() {
       toast.showToast({
         type: 'success',
         title: 'Account Connected',
-        message: 'Your LeadConnector account has been connected successfully!',
+        message: 'Your account has been connected successfully!',
         durationMs: 5000
       })
     } else if (error === 'account_already_added') {
@@ -155,7 +155,7 @@ export default function Dashboard() {
       toast.showToast({
         type: 'error',
         title: 'Location Already In Use',
-        message: 'This location is already linked to another account. Please use a different LeadConnector location.',
+        message: 'This location is already linked to another account. Please use a different subaccount.',
         durationMs: 6000
       })
     } else if (error === 'limit_reached') {
@@ -302,7 +302,7 @@ export default function Dashboard() {
               </svg>
             </div>
             <h3 className="text-sm font-semibold text-gray-900 mb-1">Manage Accounts</h3>
-            <p className="text-xs text-gray-500">View and configure your LeadConnector integrations</p>
+            <p className="text-xs text-gray-500">View and configure your agency subaccounts</p>
           </Link>
 
           <button
@@ -332,8 +332,8 @@ export default function Dashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
             </div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-1">Add Subaccount</h3>
-            <p className="text-xs text-gray-500">Connect a new LeadConnector location</p>
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Add a Subaccount</h3>
+            <p className="text-xs text-gray-500">Connect a new subaccount</p>
           </button>
 
           <Link
@@ -424,7 +424,7 @@ export default function Dashboard() {
             </div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Octendr</h3>
             <p className="text-gray-600 mb-8">
-              Connect your LeadConnector account with WhatsApp to start automating conversations
+              Connect your agency and subaccounts to WhatsApp with Octendr, and start automating conversations.
             </p>
             <Link
               href="/dashboard/add-subaccount"

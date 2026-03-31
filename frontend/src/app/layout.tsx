@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Octendr — WhatsApp messaging for LeadConnector, without leaving your CRM",
+  title: "Octendr — WhatsApp for Your Agency and Subaccounts",
   description:
-    "Connect WhatsApp to LeadConnector: send, receive, and automate messages from each location—built for agencies that live in the CRM.",
+    "Connect WhatsApp across your agency and subaccounts. Send, receive, and automate messages from one place.",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",

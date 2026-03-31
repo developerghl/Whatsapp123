@@ -50,16 +50,6 @@ export default function DashboardLayout({
     //   )
     // },
     { 
-      name: 'SMS for LeadConnector', 
-      href: '/dashboard/smsforhighlevel', 
-      current: pathname === '/dashboard/smsforhighlevel',
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-        </svg>
-      )
-    },
-    { 
       name: 'Accounts', 
       href: '/dashboard/accounts', 
       current: pathname === '/dashboard/accounts',
@@ -110,6 +100,16 @@ export default function DashboardLayout({
         </svg>
       )
     },
+    { 
+      name: 'SMS', 
+      href: '/dashboard/smsforhighlevel', 
+      current: pathname === '/dashboard/smsforhighlevel',
+      icon: (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+        </svg>
+      )
+    },
   ]
 
   return (
@@ -124,7 +124,7 @@ export default function DashboardLayout({
               <img src="/favicon.ico" alt="Octendr" width={40} height={40} className="object-contain" />
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Octendr</h1>
-                <p className="text-xs text-gray-500">WhatsApp for LeadConnector</p>
+                <p className="text-xs text-gray-500">WhatsApp for your agency and subaccounts</p>
               </div>
             </div>
 

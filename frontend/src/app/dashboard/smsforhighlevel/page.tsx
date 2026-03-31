@@ -103,7 +103,7 @@ export default function SMSforHighLevelPage() {
               Smarter SMS.
               <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
-                Built for LeadConnector.
+                Built for Octendr.
               </span>
             </h1>
 
@@ -113,7 +113,7 @@ export default function SMSforHighLevelPage() {
 
             <div className="space-y-4">
               {[
-                'Native LeadConnector integration',
+                'Built for agencies and subaccounts',
                 'Advanced conversational AI routing',
                 'Zero-code automation builder',
               ].map((bullet, i) => (
@@ -146,7 +146,7 @@ export default function SMSforHighLevelPage() {
                   Get Early Access
                 </h2>
                 <h3 className="text-base sm:text-lg font-semibold text-slate-800 mb-2">
-                  Join the waitlist for LeadConnector SMS
+                  Join the waitlist for Octendr SMS
                 </h3>
                 <p className="text-sm sm:text-[15px] text-slate-500 leading-relaxed max-w-md">
                   Tell us how to reach you—we&apos;ll notify you when SMS automation goes live. No spam;

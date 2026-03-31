@@ -56,9 +56,9 @@ const GHL_CLIENT_ID = process.env.GHL_CLIENT_ID;
 const GHL_CLIENT_SECRET = process.env.GHL_CLIENT_SECRET;
 const GHL_REDIRECT_URI = process.env.GHL_REDIRECT_URI;
 const GHL_SCOPES = process.env.GHL_SCOPES || 'locations.readonly conversations.write conversations.readonly conversations/message.readonly conversations/message.write contacts.readonly contacts.write businesses.readonly users.readonly medias.write';
-// Marketplace OAuth consent screen (grey-label). Fallback: gohighlevel.com still works if LC URL fails in your region.
+// Marketplace OAuth (location chooser). Default host is the platform marketplace (see env override).
 const LC_MARKETPLACE_AUTHORIZE_URL =
-  process.env.LC_MARKETPLACE_AUTHORIZE_URL || 'https://marketplace.leadconnectorhq.com/oauth/chooselocation';
+  process.env.LC_MARKETPLACE_AUTHORIZE_URL || 'https://marketplace.gohighlevel.com/oauth/chooselocation';
 
 // Stripe configuration
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, {
@@ -2689,7 +2689,7 @@ app.post('/admin/ghl/connect-subaccount', requireAuth, async (req, res) => {
 app.get('/ghl/provider/config', (req, res) => {
   res.json({
     name: "WhatsApp SMS Provider",
-    description: "Connect WhatsApp as SMS provider for LeadConnector",
+    description: "Connect WhatsApp as SMS provider for your agency (Octendr)",
     version: "1.0.0",
     provider: {
       type: "sms",
@@ -4095,7 +4095,7 @@ app.get('/ghl/provider/status', async (req, res) => {
       .maybeSingle();
 
     if (!ghlAccount) {
-      return res.json({ status: 'disconnected', message: 'LeadConnector location not linked yet' });
+      return res.json({ status: 'disconnected', message: 'Subaccount not linked in Octendr yet' });
     }
 
     const { data: session } = await supabaseAdmin
@@ -4132,13 +4132,13 @@ app.get('/ghl/provider', async (req, res) => {
 
     let { locationId, companyId } = req.query;
 
-    // 🔥 CRITICAL: Try to extract locationId from referer URL FIRST (LeadConnector / CRM context)
+    // 🔥 CRITICAL: Try to extract locationId from referer URL FIRST (agency app context)
     // This is the PRIMARY source - URL se jo locationId aaye, wahi use karo
     if (!locationId) {
       const referer = req.get('referer') || '';
       console.log('🔍 Checking referer URL for locationId:', referer);
 
-      // Extract locationId from CRM URLs (LeadConnector / whitelabel domains), e.g.:
+      // Extract locationId from agency app URLs (whitelabel domains), e.g.:
       // .../v2/location/LOCATION_ID/...
       // .../locations/LOCATION_ID/...
       // .../location/LOCATION_ID/...
@@ -4262,7 +4262,7 @@ app.get('/ghl/provider', async (req, res) => {
             
             <ol>
               <li class="step">
-                Go to <span class="highlight">LeadConnector Dashboard</span>
+                Go to your <span class="highlight">agency dashboard</span>
               </li>
               <li class="step">
                 Navigate to <span class="highlight">Settings → General</span>
@@ -4283,7 +4283,7 @@ app.get('/ghl/provider', async (req, res) => {
               <div class="code-block" style="margin-top: 10px;">
                 ${process.env.BACKEND_URL || 'https://api.octendr.com'}/ghl/provider
               </div>
-              This will automatically detect your location when opened from LeadConnector.
+              This will automatically detect your location when opened from inside your agency app.
             </p>
           </div>
         </body>
@@ -4620,7 +4620,7 @@ app.get('/ghl/provider', async (req, res) => {
                 </div>
                 <div class="header-text">
                   <h1 class="title">WhatsApp Business Integration</h1>
-                  <p class="subtitle">Connect your WhatsApp to LeadConnector SMS Provider</p>
+                  <p class="subtitle">Connect WhatsApp to Octendr for this subaccount.</p>
                 </div>
               </div>
 
@@ -4911,7 +4911,7 @@ app.get('/admin/ghl/locations', async (req, res) => {
 
     if (ghlError || !ghlAccounts || ghlAccounts.length === 0) {
       console.error('GHL account lookup error:', ghlError);
-      return res.status(404).json({ error: 'No LeadConnector location linked. Connect a location from the Octendr dashboard first.' });
+      return res.status(404).json({ error: 'No subaccount linked. Connect a location from the Octendr dashboard first.' });
     }
 
     console.log(`📊 Found ${ghlAccounts.length} GHL account(s) for user ${userId}`);
