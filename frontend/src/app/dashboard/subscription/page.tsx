@@ -3,8 +3,10 @@
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { useEffect, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { API_ENDPOINTS, apiCall } from '@/lib/config'
 import { useToast } from '@/components/ui/ToastProvider'
+import CheckoutForm from '@/components/dashboard/CheckoutForm'
 
 interface SubscriptionData {
   subscription_status: 'active' | 'trial' | 'free' | 'past_due' | 'cancelled' | 'expired' | 'trialing'
@@ -20,9 +22,10 @@ interface SubscriptionData {
 export default function SubscriptionPage() {
   const { user } = useAuth()
   const toast = useToast()
+  const searchParams = useSearchParams()
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [upgrading, setUpgrading] = useState<string | null>(null)
+  const [checkoutPlan, setCheckoutPlan] = useState<'starter' | 'professional' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadingPortal, setLoadingPortal] = useState(false)
 
@@ -52,10 +55,25 @@ export default function SubscriptionPage() {
     }
   }, [user?.id])
 
+  // Handle return from embedded checkout (Stripe redirects back with ?session_id=...)
+  useEffect(() => {
+    const sessionId = searchParams.get('session_id')
+    if (sessionId) {
+      toast.showToast({
+        type: 'success',
+        title: 'Payment received!',
+        message: 'Your subscription is being activated. This may take a few seconds.'
+      })
+      // Refresh subscription data after a short delay to let webhook process
+      setTimeout(() => fetchSubscription(), 2000)
+      // Clean the URL without reloading the page
+      window.history.replaceState({}, '', '/dashboard/subscription')
+    }
+  }, [searchParams, fetchSubscription, toast])
+
   useEffect(() => {
     if (!user?.id) return
-    
-    // Sync with Stripe on load (silent background sync)
+
     const syncWithStripe = async () => {
       try {
         await apiCall(API_ENDPOINTS.syncSubscription, { method: 'POST' })
@@ -63,12 +81,10 @@ export default function SubscriptionPage() {
         console.error('Error syncing subscription:', error)
       }
     }
-    
-    // Initial sync
+
     syncWithStripe()
     fetchSubscription()
-    
-    // Poll for updates every 30 seconds (reduced frequency to prevent reloads)
+
     const interval = setInterval(() => {
       syncWithStripe()
       fetchSubscription()
@@ -82,7 +98,8 @@ export default function SubscriptionPage() {
     { name: 'Professional', price: 49, subaccounts: 10, features: ['10 subaccounts', 'Unlimited WhatsApp Messages', 'API access', 'Advanced analytics'], planKey: 'professional' as const },
   ]
 
-  const handleUpgrade = async (plan: 'starter' | 'professional') => {
+  // Opens the embedded checkout modal — no redirect to Stripe
+  const handleUpgrade = (plan: 'starter' | 'professional') => {
     if (!user?.id) {
       toast.showToast({
         type: 'error',
@@ -91,54 +108,7 @@ export default function SubscriptionPage() {
       })
       return
     }
-
-    setUpgrading(plan)
-
-    try {
-      const checkoutUrl = API_ENDPOINTS.createCheckout
-
-      // Add user ID header for authentication (cross-domain cookie support)
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      
-      // Add X-User-ID header for backend authentication
-      if (user?.id) {
-        headers['X-User-ID'] = user.id;
-      }
-
-      const response = await fetch(checkoutUrl, {
-        method: 'POST',
-        headers,
-        credentials: 'include', // Include cookies if available
-        body: JSON.stringify({
-          plan,
-          userEmail: user.email
-        })
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-        throw new Error(errorData.error || 'Failed to create checkout session')
-      }
-
-      const data = await response.json()
-      const { url } = data
-
-      if (url) {
-        window.location.href = url
-      } else {
-        throw new Error('No checkout URL received')
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to start checkout. Please try again.'
-      toast.showToast({
-        type: 'error',
-        title: 'Checkout Failed',
-        message: errorMessage
-      })
-      setUpgrading(null)
-    }
+    setCheckoutPlan(plan)
   }
 
 
@@ -326,6 +296,16 @@ export default function SubscriptionPage() {
                 <span className="text-sm text-orange-800 font-medium">
                   Trial ends on {new Date(subscription.trial_ends_at).toLocaleDateString()}
                 </span>
+              </div>
+            )}
+            {/* Stripe trialing status — Professional 3-day free trial */}
+            {subscription?.subscription_status === 'trialing' && subscription?.trial_ends_at && (
+              <div className="mt-3 p-4 bg-[#fafafa] border-l-4 border-[#00A63E] rounded-lg">
+                <p className="text-sm font-semibold text-[#1a1a1a]">Free trial active</p>
+                <p className="text-xs text-[#737373] mt-1">
+                  Your card will be charged $49 on {formatDate(subscription.trial_ends_at)}.
+                  Cancel anytime before then to avoid charges.
+                </p>
               </div>
             )}
           </div>
@@ -584,6 +564,13 @@ export default function SubscriptionPage() {
                     <span className="text-3xl font-bold text-gray-900">${plan.price}</span>
                     <span className="text-gray-500 ml-1.5 text-sm">/month</span>
                   </div>
+                  {/* Trial badge — only on Professional */}
+                  {plan.planKey === 'professional' && (
+                    <p className="text-xs text-[#00A63E] font-semibold mt-1.5">✓ Includes 3-day free trial</p>
+                  )}
+                  {plan.planKey === 'starter' && (
+                    <p className="text-xs text-[#737373] mt-1.5">Billed immediately, no trial</p>
+                  )}
                 </div>
 
                 <ul className="space-y-2.5 mb-8">
@@ -597,17 +584,14 @@ export default function SubscriptionPage() {
                   ))}
                 </ul>
 
-                <button 
+                <button
+                  id={`subscribe-${plan.planKey}-btn`}
                   onClick={() => {
                     if (plan.planKey && plan.name !== 'Free Trial') {
                       handleUpgrade(plan.planKey as 'starter' | 'professional')
                     }
                   }}
-                  disabled={
-                    isCurrentPlan || 
-                    plan.name === 'Free Trial' ||
-                    (upgrading !== null && upgrading === plan.planKey)
-                  }
+                  disabled={isCurrentPlan || plan.name === 'Free Trial'}
                   className={`w-full py-2.5 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
                     subscription?.subscription_status === 'expired' && plan.name !== 'Free Trial'
                       ? 'bg-red-600 hover:bg-red-700 text-white'
@@ -616,26 +600,16 @@ export default function SubscriptionPage() {
                         : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                   } disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500`}
                 >
-                  {/* Free Trial - Never show loading */}
                   {plan.name === 'Free Trial' ? (
                     subscription?.subscription_status === 'expired' ? 'Expired' : 'Current Plan'
+                  ) : isCurrentPlan ? (
+                    'Current Plan'
+                  ) : subscription?.subscription_status === 'expired' || subscription?.subscription_status === 'past_due' ? (
+                    'Upgrade to Restore Access'
+                  ) : plan.planKey === 'professional' ? (
+                    'Start Free Trial'
                   ) : (
-                    /* Other plans - Check loading state only if planKey matches */
-                    upgrading !== null && upgrading === plan.planKey ? (
-                      <span className="flex items-center justify-center">
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Processing...
-                      </span>
-                    ) : isCurrentPlan ? (
-                      'Current Plan'
-                    ) : subscription?.subscription_status === 'expired' || subscription?.subscription_status === 'past_due' ? (
-                      'Upgrade to Restore Access'
-                    ) : (
-                      'Upgrade'
-                    )
+                    'Subscribe'
                   )}
                 </button>
               </div>
@@ -643,6 +617,14 @@ export default function SubscriptionPage() {
           })}
         </div>
       </div>
+
+      {/* Embedded Checkout Modal — renders Stripe card form inside dashboard */}
+      {checkoutPlan && (
+        <CheckoutForm
+          plan={checkoutPlan}
+          onClose={() => setCheckoutPlan(null)}
+        />
+      )}
     </div>
   )
 }

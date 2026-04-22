@@ -5,6 +5,7 @@ import { Dialog, Transition } from '@headlessui/react'
 import { useAuth } from '@/hooks/useAuth'
 import { API_ENDPOINTS } from '@/lib/config'
 import { useToast } from '@/components/ui/ToastProvider'
+import CheckoutForm from '@/components/dashboard/CheckoutForm'
 
 interface UpgradeModalProps {
   isOpen: boolean
@@ -26,6 +27,7 @@ export default function UpgradeModal({
   const { user } = useAuth()
   const toast = useToast()
   const [loading, setLoading] = useState<string | null>(null)
+  const [checkoutPlan, setCheckoutPlan] = useState<'starter' | 'professional' | null>(null)
 
   const handleAdditionalSubaccount = async () => {
     if (!user?.id) {
@@ -81,7 +83,8 @@ export default function UpgradeModal({
     }
   }
 
-  const handleUpgrade = async (plan: 'starter' | 'professional') => {
+  // Opens embedded checkout modal — no redirect to Stripe
+  const handleUpgrade = (plan: 'starter' | 'professional') => {
     if (!user?.id) {
       toast.showToast({
         type: 'error',
@@ -90,55 +93,12 @@ export default function UpgradeModal({
       })
       return
     }
-
-    setLoading(plan)
-
-    try {
-      // Add user ID header for authentication (cross-domain cookie support)
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      
-      // Add X-User-ID header for backend authentication
-      if (user?.id) {
-        headers['X-User-ID'] = user.id;
-      }
-
-      const response = await fetch(API_ENDPOINTS.createCheckout, {
-        method: 'POST',
-        headers,
-        credentials: 'include', // Include cookies if available
-        body: JSON.stringify({
-          plan,
-          userEmail: user.email
-        })
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to create checkout session')
-      }
-
-      const { url } = await response.json()
-
-      if (url) {
-        // Redirect to Stripe Checkout
-        window.location.href = url
-      } else {
-        throw new Error('No checkout URL received')
-      }
-    } catch (error) {
-      console.error('Error creating checkout:', error)
-      toast.showToast({
-        type: 'error',
-        title: 'Checkout Failed',
-        message: error instanceof Error ? error.message : 'Failed to start checkout. Please try again.'
-      })
-      setLoading(null)
-    }
+    onClose() // Close upgrade modal before opening checkout
+    setCheckoutPlan(plan)
   }
 
   return (
+    <>
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
         <Transition.Child
@@ -285,7 +245,7 @@ export default function UpgradeModal({
                         disabled={loading === 'starter'}
                         className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
                       >
-                        {loading === 'starter' ? 'Loading...' : 'Upgrade to Starter'}
+                        {loading === 'starter' ? 'Loading...' : 'Subscribe — $19/month'}
                       </button>
                     </div>
 
@@ -332,7 +292,7 @@ export default function UpgradeModal({
                         disabled={loading === 'professional'}
                         className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all"
                       >
-                        {loading === 'professional' ? 'Loading...' : 'Upgrade to Professional'}
+                        {loading === 'professional' ? 'Loading...' : 'Start Free Trial — 3 days free'}
                       </button>
                     </div>
                   </div>
@@ -352,6 +312,15 @@ export default function UpgradeModal({
         </div>
       </Dialog>
     </Transition>
+
+    {/* Embedded Checkout Modal — rendered outside the Dialog to avoid z-index issues */}
+    {checkoutPlan && (
+      <CheckoutForm
+        plan={checkoutPlan}
+        onClose={() => setCheckoutPlan(null)}
+      />
+    )}
+  </>
   )
 }
 

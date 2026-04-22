@@ -46,6 +46,13 @@ const passwordLimiter = rateLimit({
   message: { error: 'Too many attempts, please try again after 15 minutes' }
 });
 
+// H-5: Rate limiter for Stripe checkout — prevents session flooding
+const checkoutLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many checkout attempts. Please wait and try again.' }
+});
+
 // Supabase configuration
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -445,8 +452,9 @@ app.use((req, res, next) => {
 app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
     if (!stripe) {
-      console.error('❌ Stripe not configured');
-      return res.status(500).json({ error: 'Stripe not configured' });
+      // H-6: Return 200 so Stripe doesn't retry a permanently unconfigured server
+      console.error('❌ Stripe not configured — webhook event dropped');
+      return res.status(200).json({ received: true });
     }
 
     const signature = req.headers['stripe-signature'];
@@ -475,14 +483,14 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 
         const userId = session.metadata?.user_id;
         const planType = session.metadata?.plan_type; // 'starter' or 'professional'
-        const paymentType = session.metadata?.payment_type || 'recurring'; // 'recurring' or 'one-time'
+        const paymentType = session.metadata?.payment_type || 'recurring';
         const isAdditionalSubaccount = session.metadata?.additional_subaccount === 'true';
 
-        // Check if this event was already processed
+        // Idempotency: skip if already processed
         const { data: alreadyProcessed } = await supabaseAdmin
           .from('subscription_events')
           .select('id')
-          .eq('event_type', 'upgrade')
+          .in('event_type', ['upgrade', 'one_time_payment', 'subscription_trialing'])
           .filter('metadata->stripe_session_id', 'eq', session.id)
           .maybeSingle();
 
@@ -495,7 +503,6 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
         if (isAdditionalSubaccount && userId) {
           const currentMax = parseInt(session.metadata?.current_max || '0');
 
-          // Get current user info
           const { data: userInfo } = await supabaseAdmin
             .from('users')
             .select('max_subaccounts, subscription_status')
@@ -503,7 +510,6 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
             .single();
 
           if (userInfo && userInfo.subscription_status === 'active') {
-            // Increment max_subaccounts by 1
             const newMax = (userInfo.max_subaccounts || currentMax) + 1;
 
             const { error: updateError } = await supabaseAdmin
@@ -514,9 +520,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
             if (updateError) {
               console.error('❌ Error updating max_subaccounts for additional subaccount:', updateError);
             } else {
-              console.log(`✅ Additional subaccount purchased. User ${userId} max_subaccounts updated from ${userInfo.max_subaccounts} to ${newMax}`);
-
-              // Log the event
+              console.log(`✅ Additional subaccount purchased. User ${userId} max_subaccounts: ${newMax}`);
               await supabaseAdmin.from('subscription_events').insert({
                 user_id: userId,
                 event_type: 'additional_subaccount_purchased',
@@ -525,7 +529,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
                   stripe_session_id: session.id,
                   previous_max: userInfo.max_subaccounts,
                   new_max: newMax,
-                  amount: 400 // $4 in cents
+                  amount: 400
                 }
               });
             }
@@ -534,47 +538,58 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
           return res.json({ received: true });
         }
 
-        // Regular plan purchase
+        // Regular plan purchase — missing metadata returns 200 to prevent Stripe retries (audit fix C-3)
         if (!userId || !planType) {
-          console.error('❌ Missing user_id or plan_type in metadata');
-          return res.status(400).json({ error: 'Invalid metadata' });
+          console.error('❌ CRITICAL: Missing user_id or plan_type in session metadata', { sessionId: session.id });
+          return res.json({ received: true });
         }
 
-        // Plan configuration
         const planConfig = {
-          starter: { max_subaccounts: 2, price: 19 },
-          professional: { max_subaccounts: 10, price: 49 }
+          starter: { max_subaccounts: 2 },
+          professional: { max_subaccounts: 10 }
         };
 
         const config = planConfig[planType];
 
         if (!config) {
           console.error('❌ Invalid plan type:', planType);
-          return res.status(400).json({ error: 'Invalid plan type' });
+          return res.json({ received: true });
         }
 
-        // Determine subscription end date based on payment type
-        let subscriptionEndsAt;
-        if (paymentType === 'one-time') {
-          // For one-time payments, calculate based on amount or set fixed duration
-          // Example: If $19 = 1 month, $49 = 1 month (or adjust as needed)
-          subscriptionEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
-        } else {
-          // For recurring subscriptions, use subscription end date
-          subscriptionEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // Will be updated by subscription.updated event
+        // Detect trialing status — Professional plan starts with 3-day trial
+        let subscriptionStatus = 'active';
+        let trialEndsAt = null;
+
+        if (session.subscription) {
+          try {
+            const stripeSub = await stripe.subscriptions.retrieve(session.subscription);
+            if (stripeSub.status === 'trialing') {
+              subscriptionStatus = 'trialing';
+              trialEndsAt = new Date(stripeSub.trial_end * 1000).toISOString();
+              console.log(`🆓 Trial started for user ${userId}. Trial ends: ${trialEndsAt}`);
+            }
+          } catch (subRetrieveError) {
+            console.error('❌ Error retrieving subscription for trial check:', subRetrieveError.message);
+            // Fall through — default to 'active'
+          }
         }
 
-        // Update user in database
+        // Set subscription_ends_at (will be refined by customer.subscription.updated)
+        const subscriptionEndsAt = paymentType === 'one-time'
+          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        // Update user record
         const updateData = {
-          subscription_status: 'active',
+          subscription_status: subscriptionStatus,
           subscription_plan: planType,
           max_subaccounts: config.max_subaccounts,
           stripe_customer_id: session.customer,
           subscription_started_at: new Date().toISOString(),
-          subscription_ends_at: subscriptionEndsAt
+          subscription_ends_at: subscriptionEndsAt,
+          trial_ends_at: trialEndsAt,
         };
 
-        // Only add subscription_id for recurring payments
         if (paymentType === 'recurring' && session.subscription) {
           updateData.stripe_subscription_id = session.subscription;
         }
@@ -586,43 +601,46 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 
         if (updateError) {
           console.error('❌ Database update error:', updateError);
-          return res.status(500).json({ error: 'Database update failed' });
+          // Return 200 to avoid Stripe retries — log for manual review (audit fix C-1)
+          return res.json({ received: true });
         }
 
-        console.log(`✅ User ${userId} upgraded to ${planType} plan (${paymentType})`);
+        console.log(`✅ User ${userId} → ${planType} plan (status: ${subscriptionStatus})`);
 
         // Log subscription event
+        const eventType = subscriptionStatus === 'trialing'
+          ? 'subscription_trialing'
+          : paymentType === 'one-time' ? 'one_time_payment' : 'upgrade';
+
         await supabaseAdmin.from('subscription_events').insert({
           user_id: userId,
-          event_type: paymentType === 'one-time' ? 'one_time_payment' : 'upgrade',
+          event_type: eventType,
           plan_name: planType,
           metadata: {
             stripe_session_id: session.id,
             stripe_customer_id: session.customer,
             stripe_subscription_id: session.subscription || null,
             payment_type: paymentType,
-            payment_intent_id: session.payment_intent || null
+            subscription_status: subscriptionStatus,
+            trial_ends_at: trialEndsAt,
           }
         });
 
-        // Send subscription activation email
+        // Send activation email only if not trialing (during trial, send trial-specific email)
         try {
           const emailService = require('./lib/email');
-          const emailResult = await emailService.sendSubscriptionActivationEmail(userId, planType);
-          if (emailResult.success) {
+          if (subscriptionStatus !== 'trialing') {
+            await emailService.sendSubscriptionActivationEmail(userId, planType);
             console.log(`✅ Subscription activation email sent to user ${userId}`);
-          } else {
-            console.error(`❌ Failed to send subscription activation email:`, emailResult.error);
           }
+          // Note: Trial-started email can be added to EmailService if needed
         } catch (emailError) {
-          console.error('❌ Error sending subscription activation email:', emailError);
-          // Don't fail the webhook if email fails
+          console.error('❌ Error sending activation email:', emailError);
         }
 
-        // Send internal admin notification
+        // Internal admin notification
         try {
           const emailService = require('./lib/email');
-          // Fetch user email and name for admin notification
           const { data: paidUser } = await supabaseAdmin
             .from('users')
             .select('email, name')
@@ -640,7 +658,6 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
           });
         } catch (notifyError) {
           console.error('❌ Error sending internal payment notification:', notifyError);
-          // Don't fail the webhook if notification fails
         }
 
         break;
@@ -1102,8 +1119,9 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 
     res.json({ received: true });
   } catch (error) {
+    // C-1: Always return 200 — returning 500 causes Stripe to retry up to 25 times
     console.error('❌ Stripe webhook error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
+    res.status(200).json({ received: true, error: 'Internal processing error — logged for review' });
   }
 });
 
@@ -2095,140 +2113,16 @@ app.post('/api/auth/forgot-password', otpLimiter, async (req, res) => {
     }
 
     // Send OTP via email
-    const userName = user.name || user.email.split('@')[0];
-    const subject = 'Password Reset OTP - Octendr';
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Password Reset OTP</title>
-          <style>
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-              line-height: 1.6;
-              color: #333;
-              background-color: #f5f5f5;
-              margin: 0;
-              padding: 0;
-            }
-            .container {
-              max-width: 600px;
-              margin: 0 auto;
-              background-color: #ffffff;
-              padding: 0;
-            }
-            .header {
-              background: linear-gradient(135deg, #075E54 0%, #128C7E 100%);
-              padding: 30px;
-              text-align: center;
-              color: white;
-            }
-            .header h1 {
-              margin: 0;
-              font-size: 24px;
-              font-weight: 700;
-            }
-            .content {
-              padding: 40px 30px;
-            }
-            .otp-box {
-              background: #F0F2F5;
-              border: 2px dashed #25D366;
-              padding: 20px;
-              margin: 30px 0;
-              border-radius: 8px;
-              text-align: center;
-            }
-            .otp-code {
-              font-size: 32px;
-              font-weight: 700;
-              color: #25D366;
-              letter-spacing: 8px;
-              margin: 10px 0;
-            }
-            .warning-box {
-              background: #FFF3E0;
-              border-left: 4px solid #FF9800;
-              padding: 15px 20px;
-              margin: 20px 0;
-              border-radius: 4px;
-            }
-            .warning-box strong {
-              color: #E65100;
-              display: block;
-              margin-bottom: 10px;
-            }
-            .footer {
-              background: #F0F2F5;
-              padding: 20px;
-              text-align: center;
-              color: #54656F;
-              font-size: 14px;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>🔐 Password Reset</h1>
-            </div>
-            <div class="content">
-              <p>Hello ${userName},</p>
-              <p>You requested to reset your password. Use the OTP below to reset your password:</p>
-              <div class="otp-box">
-                <div class="otp-code">${otp}</div>
-              </div>
-              <div class="warning-box">
-                <strong>⏰ Important:</strong>
-                <ul style="margin: 10px 0; padding-left: 20px;">
-                  <li>This OTP expires in 10 minutes</li>
-                  <li>Do not share this OTP with anyone</li>
-                  <li>If you didn't request this, please ignore this email</li>
-                </ul>
-              </div>
-              <p style="color: #54656F; font-size: 14px; margin-top: 30px;">
-                Need help? Contact our support team.
-              </p>
-            </div>
-            <div class="footer">
-              <p>This is an automated email from <strong>Octendr</strong></p>
-              <p>WhatsApp GHL Integration Platform</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
-
-    const textContent = `
-Password Reset OTP - Octendr
-
-Hello ${userName},
-
-You requested to reset your password. Use the OTP below to reset your password:
-
-OTP: ${otp}
-
-⏰ Important:
-- This OTP expires in 10 minutes
-- Do not share this OTP with anyone
-- If you didn't request this, please ignore this email
-
-This is an automated email from Octendr.
-    `;
-
-    const emailResult = await emailService.sendEmailViaAPI({
-      to: user.email,
-      subject: subject,
-      html: htmlContent,
-      text: textContent
-    });
+    const emailResult = await emailService.sendPasswordResetOTP(
+      user.email,
+      otp,
+      user.name
+    )
 
     if (emailResult.success) {
-      console.log(`✅ OTP sent to ${user.email}`);
+      console.log(`✅ OTP sent to ${user.email}`)
     } else {
-      console.error(`❌ Failed to send OTP email:`, emailResult.error);
+      console.error(`❌ Failed to send OTP email:`, emailResult.error)
     }
 
     return res.json({ success: true, message: 'If the email exists, an OTP has been sent' });
@@ -6661,52 +6555,44 @@ app.get('/messages/session/:sessionId', requireAuth, async (req, res) => {
 // STRIPE SUBSCRIPTION ENDPOINTS
 // ===========================================
 
-// Create Stripe Checkout Session
+// Create Stripe Checkout Session (Embedded Mode)
 // Endpoint: POST /api/stripe/create-checkout
-// Required Header: X-User-ID (user authentication)
-// Request body: { plan, userEmail, successUrl?, cancelUrl? }
-// Response: { sessionId, url }
-app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
+// Required: requireAuth middleware (reads user from req.user)
+// Request body: { plan: 'starter'|'professional' }
+// Response: { clientSecret } — used by EmbeddedCheckoutProvider on frontend
+// H-5: checkoutLimiter applied — 10 sessions per 15 min per IP
+app.post('/api/stripe/create-checkout', requireAuth, checkoutLimiter, async (req, res) => {
   try {
     if (!stripe) {
-      return res.status(500).json({ error: 'Stripe not configured. Please set STRIPE_SECRET_KEY in environment variables.' });
+      return res.status(200).json({ error: 'Stripe not configured' });
     }
 
-    const { plan, userEmail, successUrl, cancelUrl, additional_subaccount } = req.body;
+    const { plan, additional_subaccount } = req.body;
     const userId = req.user.id;
-    const isAdditionalSubaccount = req.query.additional_subaccount === 'true' || additional_subaccount === true;
 
-    // Handle additional subaccount purchase
-    if (isAdditionalSubaccount) {
-      // Get user's current subscription info
-      const { data: userInfo } = await supabaseAdmin
-        .from('users')
-        .select('subscription_status, max_subaccounts')
-        .eq('id', userId)
-        .single();
+    // Always read user data from DB — never trust client (audit fix H-2, H-3)
+    const { data: userRecord, error: userFetchError } = await supabaseAdmin
+      .from('users')
+      .select('email, stripe_customer_id, subscription_status, max_subaccounts, subscription_plan')
+      .eq('id', userId)
+      .single();
 
-      if (!userInfo || userInfo.subscription_status !== 'active' || userInfo.subscription_status === 'past_due') {
-        return res.status(400).json({ error: 'You must have an active subscription (payment up to date) to purchase additional subaccounts' });
+    if (userFetchError || !userRecord) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://app.octendr.com';
+
+    // ─── Additional Subaccount (one-time payment, hosted checkout still used) ───
+    if (additional_subaccount) {
+      if (userRecord.subscription_status !== 'active') {
+        return res.status(400).json({ error: 'Active subscription required to purchase additional subaccounts' });
       }
-
-      // Additional subaccounts are only available for Professional Plan users
-      const { data: fullUserInfo } = await supabaseAdmin
-        .from('users')
-        .select('subscription_plan')
-        .eq('id', userId)
-        .single();
-
-      if (!fullUserInfo || fullUserInfo.subscription_plan !== 'professional') {
+      if (userRecord.subscription_plan !== 'professional') {
         return res.status(400).json({ error: 'Additional subaccounts are only available for Professional Plan subscribers' });
       }
 
-      // Create one-time payment for $4 additional subaccount (Professional Plan only)
-      const additionalSubaccountPrice = 400; // $4 in cents
-
-      const frontendUrl = process.env.FRONTEND_URL || 'https://whatsappghl.vercel.app';
-      const businessName = process.env.STRIPE_BUSINESS_NAME || 'Octendr';
-
-      const sessionConfig = {
+      const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [{
           price_data: {
@@ -6715,126 +6601,85 @@ app.post('/api/stripe/create-checkout', requireAuth, async (req, res) => {
               name: 'Additional Subaccount (Professional Plan)',
               description: 'Add one more subaccount to your existing plan'
             },
-            unit_amount: additionalSubaccountPrice,
+            unit_amount: 400, // $4
           },
           quantity: 1,
         }],
-        mode: 'payment', // One-time payment
+        mode: 'payment',
+        // Reuse Stripe customer to prevent duplicates
+        ...(userRecord.stripe_customer_id
+          ? { customer: userRecord.stripe_customer_id }
+          : { customer_email: userRecord.email }
+        ),
         success_url: `${frontendUrl}/dashboard?subscription=success&additional_subaccount=true&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${frontendUrl}/dashboard?subscription=cancelled`,
-        customer_email: userEmail,
         metadata: {
           user_id: userId,
           additional_subaccount: 'true',
-          current_max: userInfo.max_subaccounts.toString()
+          current_max: (userRecord.max_subaccounts || 0).toString()
         },
-      };
+      });
 
-      const session = await stripe.checkout.sessions.create(sessionConfig);
-      return res.json({ sessionId: session.id, url: session.url });
+      return res.json({ url: session.url });
     }
 
-    // Regular plan purchase
+    // ─── Regular Plan Purchase (Embedded Checkout) ───
+
     if (!plan || (plan !== 'starter' && plan !== 'professional')) {
       return res.status(400).json({ error: 'Invalid plan. Must be "starter" or "professional"' });
     }
 
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
-    }
-
-    // Get price ID based on plan
-    const priceId = plan === 'starter'
-      ? STRIPE_STARTER_PRICE_ID
-      : STRIPE_PROFESSIONAL_PRICE_ID;
-
-    if (!priceId) {
-      return res.status(500).json({ error: `Price ID not configured for ${plan} plan. Please set STRIPE_${plan.toUpperCase()}_PRICE_ID in environment variables.` });
-    }
-
-    // Get user email if not provided
-    let email = userEmail;
-    if (!email) {
-      const { data: user, error: userError } = await supabaseAdmin
-        .from('users')
-        .select('email')
-        .eq('id', userId)
-        .single();
-
-      if (userError) {
-        console.error('Error fetching user email:', userError);
-      } else if (user) {
-        email = user.email;
-      }
-    }
-
-    const frontendUrl = process.env.FRONTEND_URL || 'https://whatsappghl.vercel.app';
-
-    // Get business name from environment (default to "Octendr" if not set)
-    const businessName = process.env.STRIPE_BUSINESS_NAME || 'Octendr';
-
-    // Create checkout session - Support both recurring (subscription) and one-time payments
-    // Check if price is one-time or recurring
-    let price;
-    try {
-      price = await stripe.prices.retrieve(priceId);
-    } catch (priceError) {
-      console.error('Error retrieving price from Stripe:', priceError);
-      return res.status(500).json({
-        error: 'Failed to retrieve price from Stripe',
-        details: priceError.message
+    // Block if already actively subscribed (prevents duplicate checkout sessions)
+    if (userRecord.subscription_status === 'active' || userRecord.subscription_status === 'trialing') {
+      return res.status(400).json({
+        error: 'You already have an active subscription. Use the customer portal to manage it.'
       });
     }
 
-    const isRecurring = price.recurring !== null; // If recurring is not null, it's a subscription
-    const mode = isRecurring ? 'subscription' : 'payment';
+    // Get price ID from env vars only — never from client
+    const priceId = plan === 'starter' ? STRIPE_STARTER_PRICE_ID : STRIPE_PROFESSIONAL_PRICE_ID;
 
-    // Use custom URLs if provided, otherwise use defaults
-    const finalSuccessUrl = successUrl || `${frontendUrl}/dashboard?subscription=success&session_id={CHECKOUT_SESSION_ID}`;
-    const finalCancelUrl = cancelUrl || `${frontendUrl}/dashboard?subscription=cancelled`;
+    if (!priceId) {
+      return res.status(500).json({
+        error: `Price ID not configured for ${plan} plan. Set STRIPE_${plan.toUpperCase()}_PRICE_ID in env.`
+      });
+    }
 
-    // Create checkout session
+    // Build session config for Embedded Checkout (ui_mode: 'embedded')
     const sessionConfig = {
       payment_method_types: ['card'],
-      line_items: [{
-        price: priceId,
-        quantity: 1,
-      }],
-      mode: mode, // 'subscription' for recurring OR 'payment' for one-time
-      success_url: finalSuccessUrl,
-      cancel_url: finalCancelUrl,
-      customer_email: email,
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: 'subscription',
+      ui_mode: 'embedded',
+      // return_url replaces success_url + cancel_url in embedded mode
+      // {CHECKOUT_SESSION_ID} is replaced by Stripe with actual session ID
+      return_url: `${frontendUrl}/dashboard/subscription?session_id={CHECKOUT_SESSION_ID}`,
       metadata: {
-        user_id: userId,           // Required - Webhook ke liye
-        plan_type: plan,           // Required - 'starter' or 'professional'
-        payment_type: isRecurring ? 'recurring' : 'one-time', // Optional - Track payment type
-        business_name: businessName, // Store business name in metadata
+        user_id: userId,
+        plan_type: plan,
+        payment_type: 'recurring',
+      },
+      subscription_data: {
+        metadata: {
+          user_id: userId,
+          plan_type: plan,
+        },
+        // 3-day free trial for Professional only — Starter charges immediately
+        ...(plan === 'professional' ? { trial_period_days: 3 } : {}),
       },
     };
 
-    // Add subscription_data for recurring payments to customize description
-    if (mode === 'subscription') {
-      sessionConfig.subscription_data = {
-        description: `Subscription to ${businessName} ${plan.charAt(0).toUpperCase() + plan.slice(1)} Plan`,
-        metadata: {
-          business_name: businessName,
-        },
-      };
-    }
-
-    // Add payment_intent_data for one-time payments
-    if (mode === 'payment') {
-      sessionConfig.payment_intent_data = {
-        description: `Payment to ${businessName} for ${plan.charAt(0).toUpperCase() + plan.slice(1)} Plan`,
-        metadata: {
-          business_name: businessName,
-        },
-      };
+    // Reuse existing Stripe customer if available (prevents duplicate customer records)
+    if (userRecord.stripe_customer_id) {
+      sessionConfig.customer = userRecord.stripe_customer_id;
+    } else {
+      sessionConfig.customer_email = userRecord.email;
     }
 
     const session = await stripe.checkout.sessions.create(sessionConfig);
 
-    res.json({ sessionId: session.id, url: session.url });
+    // Return clientSecret for EmbeddedCheckoutProvider — NOT a URL
+    res.json({ clientSecret: session.client_secret });
   } catch (error) {
     console.error('Stripe checkout error:', error);
     res.status(500).json({
@@ -7022,6 +6867,11 @@ app.post('/api/stripe/cancel-subscription', requireAuth, async (req, res) => {
 
 // Manual endpoint to trigger trial expiry check (for testing/admin)
 app.post('/api/admin/check-expired-trials', async (req, res) => {
+  // C-4: Require admin secret — prevents unauthorized trial expiry triggering
+  const adminSecret = req.headers['x-admin-secret'];
+  if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   try {
     await checkAndProcessExpiredTrials();
     res.json({ success: true, message: 'Trial expiry check completed' });
@@ -7033,6 +6883,11 @@ app.post('/api/admin/check-expired-trials', async (req, res) => {
 
 // Manual endpoint to trigger reminder check (for testing/admin)
 app.post('/api/admin/check-reminders', async (req, res) => {
+  // C-4: Require admin secret — prevents unauthorized email spam
+  const adminSecret = req.headers['x-admin-secret'];
+  if (!adminSecret || adminSecret !== process.env.ADMIN_SECRET_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   try {
     await checkAndSendReminders();
     res.json({ success: true, message: 'Reminder check completed' });
