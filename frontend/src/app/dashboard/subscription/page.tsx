@@ -6,7 +6,6 @@ import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { API_ENDPOINTS, apiCall } from '@/lib/config'
 import { useToast } from '@/components/ui/ToastProvider'
-import CheckoutForm from '@/components/dashboard/CheckoutForm'
 
 interface SubscriptionData {
   subscription_status: 'active' | 'trial' | 'free' | 'past_due' | 'cancelled' | 'expired' | 'trialing'
@@ -25,7 +24,7 @@ export default function SubscriptionPage() {
   const searchParams = useSearchParams()
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [checkoutPlan, setCheckoutPlan] = useState<'starter' | 'professional' | null>(null)
+  const [upgrading, setUpgrading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadingPortal, setLoadingPortal] = useState(false)
 
@@ -98,17 +97,46 @@ export default function SubscriptionPage() {
     { name: 'Professional', price: 49, subaccounts: 10, features: ['10 subaccounts', 'Unlimited WhatsApp Messages', 'API access', 'Advanced analytics'], planKey: 'professional' as const },
   ]
 
-  // Opens the embedded checkout modal — no redirect to Stripe
-  const handleUpgrade = (plan: 'starter' | 'professional') => {
+  // Opens Stripe hosted checkout — redirect to checkout.stripe.com
+  const handleUpgrade = async (plan: 'starter' | 'professional') => {
     if (!user?.id) {
-      toast.showToast({
-        type: 'error',
-        title: 'Login Required',
-        message: 'Please login to upgrade'
-      })
+      toast.showToast({ type: 'error', title: 'Login Required', message: 'Please login to upgrade' })
       return
     }
-    setCheckoutPlan(plan)
+
+    setUpgrading(plan)
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (user?.id) headers['X-User-ID'] = user.id
+
+      const response = await fetch(API_ENDPOINTS.createCheckout, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ plan }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(errorData.error || 'Failed to create checkout session')
+      }
+
+      const data = await response.json()
+
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        throw new Error('No checkout URL received')
+      }
+    } catch (error) {
+      toast.showToast({
+        type: 'error',
+        title: 'Checkout Failed',
+        message: error instanceof Error ? error.message : 'Failed to start checkout. Please try again.'
+      })
+      setUpgrading(null)
+    }
   }
 
 
@@ -591,7 +619,7 @@ export default function SubscriptionPage() {
                       handleUpgrade(plan.planKey as 'starter' | 'professional')
                     }
                   }}
-                  disabled={isCurrentPlan || plan.name === 'Free Trial'}
+                  disabled={isCurrentPlan || plan.name === 'Free Trial' || (upgrading !== null && upgrading === plan.planKey)}
                   className={`w-full py-2.5 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
                     subscription?.subscription_status === 'expired' && plan.name !== 'Free Trial'
                       ? 'bg-red-600 hover:bg-red-700 text-white'
@@ -602,6 +630,14 @@ export default function SubscriptionPage() {
                 >
                   {plan.name === 'Free Trial' ? (
                     subscription?.subscription_status === 'expired' ? 'Expired' : 'Current Plan'
+                  ) : upgrading === plan.planKey ? (
+                    <span className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Redirecting...
+                    </span>
                   ) : isCurrentPlan ? (
                     'Current Plan'
                   ) : subscription?.subscription_status === 'expired' || subscription?.subscription_status === 'past_due' ? (
@@ -617,14 +653,6 @@ export default function SubscriptionPage() {
           })}
         </div>
       </div>
-
-      {/* Embedded Checkout Modal — renders Stripe card form inside dashboard */}
-      {checkoutPlan && (
-        <CheckoutForm
-          plan={checkoutPlan}
-          onClose={() => setCheckoutPlan(null)}
-        />
-      )}
     </div>
   )
 }

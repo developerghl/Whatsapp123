@@ -6555,11 +6555,11 @@ app.get('/messages/session/:sessionId', requireAuth, async (req, res) => {
 // STRIPE SUBSCRIPTION ENDPOINTS
 // ===========================================
 
-// Create Stripe Checkout Session (Embedded Mode)
+// Create Stripe Checkout Session (Hosted — redirect to checkout.stripe.com)
 // Endpoint: POST /api/stripe/create-checkout
-// Required: requireAuth middleware (reads user from req.user)
+// Required: requireAuth middleware
 // Request body: { plan: 'starter'|'professional' }
-// Response: { clientSecret } — used by EmbeddedCheckoutProvider on frontend
+// Response: { url } — frontend redirects user to this URL
 // H-5: checkoutLimiter applied — 10 sessions per 15 min per IP
 app.post('/api/stripe/create-checkout', requireAuth, checkoutLimiter, async (req, res) => {
   try {
@@ -6570,7 +6570,7 @@ app.post('/api/stripe/create-checkout', requireAuth, checkoutLimiter, async (req
     const { plan, additional_subaccount } = req.body;
     const userId = req.user.id;
 
-    // Always read user data from DB — never trust client (audit fix H-2, H-3)
+    // Always read user data from DB — never trust client (audit fix H-2, H-3, L-2)
     const { data: userRecord, error: userFetchError } = await supabaseAdmin
       .from('users')
       .select('email, stripe_customer_id, subscription_status, max_subaccounts, subscription_plan')
@@ -6583,7 +6583,7 @@ app.post('/api/stripe/create-checkout', requireAuth, checkoutLimiter, async (req
 
     const frontendUrl = process.env.FRONTEND_URL || 'https://app.octendr.com';
 
-    // ─── Additional Subaccount (one-time payment, hosted checkout still used) ───
+    // ─── Additional Subaccount (one-time payment) ───
     if (additional_subaccount) {
       if (userRecord.subscription_status !== 'active') {
         return res.status(400).json({ error: 'Active subscription required to purchase additional subaccounts' });
@@ -6606,13 +6606,12 @@ app.post('/api/stripe/create-checkout', requireAuth, checkoutLimiter, async (req
           quantity: 1,
         }],
         mode: 'payment',
-        // Reuse Stripe customer to prevent duplicates
         ...(userRecord.stripe_customer_id
           ? { customer: userRecord.stripe_customer_id }
           : { customer_email: userRecord.email }
         ),
         success_url: `${frontendUrl}/dashboard?subscription=success&additional_subaccount=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${frontendUrl}/dashboard?subscription=cancelled`,
+        cancel_url: `${frontendUrl}/dashboard/subscription`,
         metadata: {
           user_id: userId,
           additional_subaccount: 'true',
@@ -6623,13 +6622,13 @@ app.post('/api/stripe/create-checkout', requireAuth, checkoutLimiter, async (req
       return res.json({ url: session.url });
     }
 
-    // ─── Regular Plan Purchase (Embedded Checkout) ───
+    // ─── Regular Plan Purchase (Hosted Checkout) ───
 
     if (!plan || (plan !== 'starter' && plan !== 'professional')) {
       return res.status(400).json({ error: 'Invalid plan. Must be "starter" or "professional"' });
     }
 
-    // Block if already actively subscribed (prevents duplicate checkout sessions)
+    // Block if already actively subscribed
     if (userRecord.subscription_status === 'active' || userRecord.subscription_status === 'trialing') {
       return res.status(400).json({
         error: 'You already have an active subscription. Use the customer portal to manage it.'
@@ -6645,15 +6644,13 @@ app.post('/api/stripe/create-checkout', requireAuth, checkoutLimiter, async (req
       });
     }
 
-    // Build session config for Embedded Checkout (ui_mode: 'embedded')
+    // Build session config — Hosted Checkout (redirects to checkout.stripe.com)
     const sessionConfig = {
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       mode: 'subscription',
-      ui_mode: 'embedded',
-      // return_url replaces success_url + cancel_url in embedded mode
-      // {CHECKOUT_SESSION_ID} is replaced by Stripe with actual session ID
-      return_url: `${frontendUrl}/dashboard/subscription?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${frontendUrl}/dashboard/subscription?subscription=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${frontendUrl}/dashboard/subscription`,
       metadata: {
         user_id: userId,
         plan_type: plan,
@@ -6669,7 +6666,7 @@ app.post('/api/stripe/create-checkout', requireAuth, checkoutLimiter, async (req
       },
     };
 
-    // Reuse existing Stripe customer if available (prevents duplicate customer records)
+    // Reuse existing Stripe customer if available (prevents duplicate customer records — audit H-3)
     if (userRecord.stripe_customer_id) {
       sessionConfig.customer = userRecord.stripe_customer_id;
     } else {
@@ -6678,8 +6675,8 @@ app.post('/api/stripe/create-checkout', requireAuth, checkoutLimiter, async (req
 
     const session = await stripe.checkout.sessions.create(sessionConfig);
 
-    // Return clientSecret for EmbeddedCheckoutProvider — NOT a URL
-    res.json({ clientSecret: session.client_secret });
+    // Return hosted checkout URL — frontend does window.location.href = url
+    res.json({ url: session.url });
   } catch (error) {
     console.error('Stripe checkout error:', error);
     res.status(500).json({

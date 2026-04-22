@@ -5,7 +5,6 @@ import { Dialog, Transition } from '@headlessui/react'
 import { useAuth } from '@/hooks/useAuth'
 import { API_ENDPOINTS } from '@/lib/config'
 import { useToast } from '@/components/ui/ToastProvider'
-import CheckoutForm from '@/components/dashboard/CheckoutForm'
 
 interface UpgradeModalProps {
   isOpen: boolean
@@ -27,7 +26,6 @@ export default function UpgradeModal({
   const { user } = useAuth()
   const toast = useToast()
   const [loading, setLoading] = useState<string | null>(null)
-  const [checkoutPlan, setCheckoutPlan] = useState<'starter' | 'professional' | null>(null)
 
   const handleAdditionalSubaccount = async () => {
     if (!user?.id) {
@@ -83,22 +81,48 @@ export default function UpgradeModal({
     }
   }
 
-  // Opens embedded checkout modal — no redirect to Stripe
-  const handleUpgrade = (plan: 'starter' | 'professional') => {
+  const handleUpgrade = async (plan: 'starter' | 'professional') => {
     if (!user?.id) {
-      toast.showToast({
-        type: 'error',
-        title: 'Login Required',
-        message: 'Please login to upgrade'
-      })
+      toast.showToast({ type: 'error', title: 'Login Required', message: 'Please login to upgrade' })
       return
     }
-    onClose() // Close upgrade modal before opening checkout
-    setCheckoutPlan(plan)
+
+    setLoading(plan)
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (user?.id) headers['X-User-ID'] = user.id
+
+      const response = await fetch(API_ENDPOINTS.createCheckout, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ plan }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to create checkout session')
+      }
+
+      const { url } = await response.json()
+
+      if (url) {
+        window.location.href = url
+      } else {
+        throw new Error('No checkout URL received')
+      }
+    } catch (error) {
+      toast.showToast({
+        type: 'error',
+        title: 'Checkout Failed',
+        message: error instanceof Error ? error.message : 'Failed to start checkout. Please try again.'
+      })
+      setLoading(null)
+    }
   }
 
   return (
-    <>
     <Transition appear show={isOpen} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
         <Transition.Child
@@ -245,7 +269,7 @@ export default function UpgradeModal({
                         disabled={loading === 'starter'}
                         className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
                       >
-                        {loading === 'starter' ? 'Loading...' : 'Subscribe — $19/month'}
+                        {loading === 'starter' ? 'Loading...' : 'Upgrade to Starter'}
                       </button>
                     </div>
 
@@ -292,7 +316,7 @@ export default function UpgradeModal({
                         disabled={loading === 'professional'}
                         className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all"
                       >
-                        {loading === 'professional' ? 'Loading...' : 'Start Free Trial — 3 days free'}
+                        {loading === 'professional' ? 'Loading...' : 'Upgrade to Professional'}
                       </button>
                     </div>
                   </div>
@@ -312,15 +336,6 @@ export default function UpgradeModal({
         </div>
       </Dialog>
     </Transition>
-
-    {/* Embedded Checkout Modal — rendered outside the Dialog to avoid z-index issues */}
-    {checkoutPlan && (
-      <CheckoutForm
-        plan={checkoutPlan}
-        onClose={() => setCheckoutPlan(null)}
-      />
-    )}
-  </>
   )
 }
 
