@@ -223,47 +223,85 @@ export default function DashboardLayout({
       </div>
 
       {isLocked && !isSubscriptionPage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/95 backdrop-blur-sm">
-          <div className="max-w-md text-center px-6">
-            <div className="w-12 h-12 rounded-xl bg-[#00A63E] flex items-center justify-center mx-auto mb-6">
-              <span className="text-white font-extrabold text-xl">O</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-b from-white via-white to-gray-50">
+          <div className="max-w-lg w-full mx-4 text-center">
+            <div className="flex flex-col items-center mb-8">
+              <div className="flex items-center justify-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/favicon.ico"
+                  alt="Octendr"
+                  width={48}
+                  height={48}
+                  className="object-contain rounded-xl shadow-md ring-1 ring-gray-200/90"
+                />
+                <span className="text-2xl font-extrabold text-[#1a1a1a] tracking-tight">Octendr</span>
+              </div>
+              <p className="text-xs text-[#737373] mt-2 max-w-xs">
+                WhatsApp for your agency and subaccounts
+              </p>
             </div>
-            <h1 className="text-2xl font-extrabold text-[#1a1a1a] tracking-tight">
+
+            <h1 className="text-3xl font-extrabold text-[#1a1a1a] tracking-tight leading-tight">
               Choose a plan to get started
             </h1>
-            <p className="text-sm text-[#737373] mt-2 mb-6">
-              Your account is ready. Pick a plan and start your 3-day free trial — no charge until the trial ends.
+            <p className="text-sm text-[#737373] mt-3 mb-8 max-w-sm mx-auto">
+              Your account is ready. Pick a plan and start your 3-day free trial — you won&apos;t be charged until the trial ends.
             </p>
-            <div className="grid grid-cols-2 gap-3 mb-6">
+
+            <div className="grid grid-cols-2 gap-4 mb-6 max-w-xl mx-auto">
               <button
                 type="button"
                 onClick={() => lockRouter.push('/dashboard/subscription')}
-                className="border border-[#e5e5e5] rounded-2xl p-4 text-left hover:border-[#00A63E] transition-all"
+                className="group border border-[#e5e5e5] rounded-2xl p-6 text-left hover:border-[#00A63E] hover:shadow-lg hover:shadow-[#00A63E]/5 transition-all duration-200 bg-white"
               >
-                <div className="text-sm font-bold text-[#1a1a1a]">Starter</div>
-                <div className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
-                  $19<span className="text-xs font-normal text-[#a3a3a3]">/mo</span>
+                <div className="text-sm font-semibold text-[#a3a3a3] uppercase tracking-wider mb-2">Starter</div>
+                <div className="text-4xl font-extrabold text-[#1a1a1a]">
+                  $19<span className="text-sm font-normal text-[#a3a3a3]">/mo</span>
                 </div>
-                <div className="text-xs text-[#737373] mt-1">2 subaccounts</div>
-                <div className="text-xs text-[#00A63E] font-semibold mt-2">3-day free trial</div>
+                <div className="text-sm text-[#737373] mt-2 space-y-1">
+                  <div>2 subaccounts</div>
+                  <div>Unlimited messages</div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
+                  <span className="text-sm text-[#00A63E] font-semibold">3-day free trial →</span>
+                </div>
               </button>
+
               <button
                 type="button"
                 onClick={() => lockRouter.push('/dashboard/subscription')}
-                className="border-2 border-[#00A63E] rounded-2xl p-4 text-left relative"
+                className="group border-2 border-[#00A63E] rounded-2xl p-6 text-left relative hover:shadow-lg hover:shadow-[#00A63E]/10 transition-all duration-200 bg-white"
               >
-                <span className="absolute -top-2 right-3 text-[9px] font-bold text-white bg-[#00A63E] px-2 py-0.5 rounded-full">
+                <span className="absolute -top-2.5 right-4 text-[10px] font-bold text-white bg-[#00A63E] px-3 py-0.5 rounded-full">
                   Popular
                 </span>
-                <div className="text-sm font-bold text-[#1a1a1a]">Professional</div>
-                <div className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
-                  $49<span className="text-xs font-normal text-[#a3a3a3]">/mo</span>
+                <div className="text-sm font-semibold text-[#a3a3a3] uppercase tracking-wider mb-2">Professional</div>
+                <div className="text-4xl font-extrabold text-[#1a1a1a]">
+                  $49<span className="text-sm font-normal text-[#a3a3a3]">/mo</span>
                 </div>
-                <div className="text-xs text-[#737373] mt-1">10 subaccounts</div>
-                <div className="text-xs text-[#00A63E] font-semibold mt-2">3-day free trial</div>
+                <div className="text-sm text-[#737373] mt-2 space-y-1">
+                  <div>10 subaccounts</div>
+                  <div>Unlimited messages</div>
+                  <div>API access</div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-[#f0f0f0]">
+                  <span className="text-sm text-[#00A63E] font-semibold">3-day free trial →</span>
+                </div>
               </button>
             </div>
-            <p className="text-xs text-[#a3a3a3]">Cancel anytime during trial — no charges.</p>
+
+            <p className="text-xs text-[#a3a3a3]">
+              Cancel anytime during trial — no charges. No commitment.
+            </p>
+
+            <button
+              type="button"
+              onClick={logout}
+              className="mt-6 text-xs text-[#a3a3a3] hover:text-[#737373] underline transition-colors"
+            >
+              Sign out
+            </button>
           </div>
         </div>
       )}
