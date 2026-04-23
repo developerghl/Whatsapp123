@@ -8,7 +8,7 @@ import { API_ENDPOINTS, apiCall } from '@/lib/config'
 import { useToast } from '@/components/ui/ToastProvider'
 
 interface SubscriptionData {
-  subscription_status: 'active' | 'trial' | 'free' | 'past_due' | 'cancelled' | 'expired' | 'trialing'
+  subscription_status: 'active' | 'trial' | 'free' | 'past_due' | 'cancelled' | 'expired' | 'trialing' | 'pending'
   subscription_plan: string
   max_subaccounts: number
   trial_ends_at?: string
@@ -19,7 +19,7 @@ interface SubscriptionData {
 }
 
 export default function SubscriptionPage() {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const toast = useToast()
   const searchParams = useSearchParams()
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null)
@@ -54,7 +54,7 @@ export default function SubscriptionPage() {
     }
   }, [user?.id])
 
-  // Handle return from embedded checkout (Stripe redirects back with ?session_id=...)
+  // Handle return from Stripe hosted checkout (?session_id=...)
   useEffect(() => {
     const sessionId = searchParams.get('session_id')
     if (sessionId) {
@@ -63,12 +63,13 @@ export default function SubscriptionPage() {
         title: 'Payment received!',
         message: 'Your subscription is being activated. This may take a few seconds.'
       })
-      // Refresh subscription data after a short delay to let webhook process
-      setTimeout(() => fetchSubscription(), 2000)
-      // Clean the URL without reloading the page
+      setTimeout(async () => {
+        await fetchSubscription()
+        await refreshUser()
+      }, 2000)
       window.history.replaceState({}, '', '/dashboard/subscription')
     }
-  }, [searchParams, fetchSubscription, toast])
+  }, [searchParams, fetchSubscription, toast, refreshUser])
 
   useEffect(() => {
     if (!user?.id) return
@@ -252,6 +253,17 @@ export default function SubscriptionPage() {
         ) : null}
       </div>
 
+      {(!subscription?.subscription_status ||
+        subscription?.subscription_status === 'pending' ||
+        subscription?.subscription_status === 'expired') && (
+        <div className="bg-[#fafafa] border border-[#e5e5e5] rounded-2xl p-5 mb-6 text-center">
+          <h2 className="text-lg font-extrabold text-[#1a1a1a]">Start your 3-day free trial</h2>
+          <p className="text-sm text-[#737373] mt-1">
+            Pick a plan below and enter your card. You won&apos;t be charged until the trial ends.
+          </p>
+        </div>
+      )}
+
       {/* Current Plan - Stripe-style Modern Card */}
       <div className={`rounded-2xl p-8 border-2 transition-all ${
         subscription?.subscription_status === 'expired' 
@@ -331,7 +343,7 @@ export default function SubscriptionPage() {
               <div className="mt-3 p-4 bg-[#fafafa] border-l-4 border-[#00A63E] rounded-lg">
                 <p className="text-sm font-semibold text-[#1a1a1a]">Free trial active</p>
                 <p className="text-xs text-[#737373] mt-1">
-                  Your card will be charged $49 on {formatDate(subscription.trial_ends_at)}.
+                  Your card will be charged {subscription?.subscription_plan === 'professional' ? '$49' : '$19'} on {formatDate(subscription.trial_ends_at)}.
                   Cancel anytime before then to avoid charges.
                 </p>
               </div>
@@ -592,13 +604,9 @@ export default function SubscriptionPage() {
                     <span className="text-3xl font-bold text-gray-900">${plan.price}</span>
                     <span className="text-gray-500 ml-1.5 text-sm">/month</span>
                   </div>
-                  {/* Trial badge — only on Professional */}
-                  {plan.planKey === 'professional' && (
+                  {plan.planKey === 'starter' || plan.planKey === 'professional' ? (
                     <p className="text-xs text-[#00A63E] font-semibold mt-1.5">✓ Includes 3-day free trial</p>
-                  )}
-                  {plan.planKey === 'starter' && (
-                    <p className="text-xs text-[#737373] mt-1.5">Billed immediately, no trial</p>
-                  )}
+                  ) : null}
                 </div>
 
                 <ul className="space-y-2.5 mb-8">

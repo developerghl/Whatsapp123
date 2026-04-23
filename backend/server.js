@@ -1007,7 +1007,7 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
             .from('users')
             .update({
               subscription_status: 'expired',
-              max_subaccounts: 1,
+              max_subaccounts: 0,
               stripe_subscription_id: null
             })
             .eq('id', user.id);
@@ -6661,8 +6661,7 @@ app.post('/api/stripe/create-checkout', requireAuth, checkoutLimiter, async (req
           user_id: userId,
           plan_type: plan,
         },
-        // 3-day free trial for Professional only — Starter charges immediately
-        ...(plan === 'professional' ? { trial_period_days: 3 } : {}),
+        trial_period_days: 3, // 3-day free trial for ALL plans
       },
     };
 

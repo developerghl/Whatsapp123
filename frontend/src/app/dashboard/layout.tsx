@@ -1,6 +1,6 @@
 'use client'
 
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import Link from 'next/link'
 // switched header logo to native <img> to use public favicon directly
@@ -12,6 +12,7 @@ export default function DashboardLayout({
 }) {
   const { user, loading, logout } = useAuth()
   const pathname = usePathname()
+  const lockRouter = useRouter()
 
   if (loading) {
     return (
@@ -27,6 +28,10 @@ export default function DashboardLayout({
   if (!user) {
     return null
   }
+
+  const isLocked = !['trialing', 'active', 'past_due'].includes(user.subscription_status || '')
+  const isSubscriptionPage =
+    pathname === '/dashboard/subscription' || pathname.startsWith('/dashboard/subscription/')
 
   const navigation = [
     { 
@@ -216,6 +221,52 @@ export default function DashboardLayout({
           </div>
         </main>
       </div>
+
+      {isLocked && !isSubscriptionPage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/95 backdrop-blur-sm">
+          <div className="max-w-md text-center px-6">
+            <div className="w-12 h-12 rounded-xl bg-[#00A63E] flex items-center justify-center mx-auto mb-6">
+              <span className="text-white font-extrabold text-xl">O</span>
+            </div>
+            <h1 className="text-2xl font-extrabold text-[#1a1a1a] tracking-tight">
+              Choose a plan to get started
+            </h1>
+            <p className="text-sm text-[#737373] mt-2 mb-6">
+              Your account is ready. Pick a plan and start your 3-day free trial — no charge until the trial ends.
+            </p>
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <button
+                type="button"
+                onClick={() => lockRouter.push('/dashboard/subscription')}
+                className="border border-[#e5e5e5] rounded-2xl p-4 text-left hover:border-[#00A63E] transition-all"
+              >
+                <div className="text-sm font-bold text-[#1a1a1a]">Starter</div>
+                <div className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+                  $19<span className="text-xs font-normal text-[#a3a3a3]">/mo</span>
+                </div>
+                <div className="text-xs text-[#737373] mt-1">2 subaccounts</div>
+                <div className="text-xs text-[#00A63E] font-semibold mt-2">3-day free trial</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => lockRouter.push('/dashboard/subscription')}
+                className="border-2 border-[#00A63E] rounded-2xl p-4 text-left relative"
+              >
+                <span className="absolute -top-2 right-3 text-[9px] font-bold text-white bg-[#00A63E] px-2 py-0.5 rounded-full">
+                  Popular
+                </span>
+                <div className="text-sm font-bold text-[#1a1a1a]">Professional</div>
+                <div className="text-2xl font-extrabold text-[#1a1a1a] mt-1">
+                  $49<span className="text-xs font-normal text-[#a3a3a3]">/mo</span>
+                </div>
+                <div className="text-xs text-[#737373] mt-1">10 subaccounts</div>
+                <div className="text-xs text-[#00A63E] font-semibold mt-2">3-day free trial</div>
+              </button>
+            </div>
+            <p className="text-xs text-[#a3a3a3]">Cancel anytime during trial — no charges.</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

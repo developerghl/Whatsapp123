@@ -1,17 +1,55 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
-interface User {
+export interface User {
   id: string
   email: string
   name?: string
+  subscription_status: string | null
+  subscription_plan: string | null
+  trial_ends_at: string | null
+  max_subaccounts: number
+}
+
+function userFromRow(data: {
+  id: string
+  email: string
+  name?: string | null
+  subscription_status?: string | null
+  subscription_plan?: string | null
+  trial_ends_at?: string | null
+  max_subaccounts?: number | null
+}): User {
+  return {
+    id: data.id,
+    name: (data.name as string | undefined) ?? undefined,
+    email: data.email,
+    subscription_status: data.subscription_status ?? null,
+    subscription_plan: data.subscription_plan ?? null,
+    trial_ends_at: data.trial_ends_at ?? null,
+    max_subaccounts: data.max_subaccounts ?? 0,
+  }
 }
 
 export function useAuth() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const refreshUser = useCallback(async () => {
+    if (!user?.id) return
+    const { data } = await supabase
+      .from('users')
+      .select('id, name, email, subscription_status, subscription_plan, trial_ends_at, max_subaccounts')
+      .eq('id', user.id)
+      .maybeSingle()
+    if (data) {
+      const next = userFromRow(data)
+      setUser(next)
+      localStorage.setItem('user', JSON.stringify(next))
+    }
+  }, [user?.id])
 
   useEffect(() => {
     const init = async () => {
@@ -22,19 +60,27 @@ export function useAuth() {
         return
       }
 
-      const parsed = JSON.parse(userData) as User
-      setUser(parsed)
+      const parsed = JSON.parse(userData) as Record<string, unknown>
+      const interim: User = {
+        id: String(parsed.id),
+        email: String(parsed.email),
+        name: parsed.name != null ? String(parsed.name) : undefined,
+        subscription_status: (parsed.subscription_status as string) ?? null,
+        subscription_plan: (parsed.subscription_plan as string) ?? null,
+        trial_ends_at: (parsed.trial_ends_at as string) ?? null,
+        max_subaccounts: typeof parsed.max_subaccounts === 'number' ? parsed.max_subaccounts : 0,
+      }
+      setUser(interim)
 
-      // Fetch fresh profile from database to ensure we have latest name/email
       try {
         const { data } = await supabase
           .from('users')
-          .select('id, name, email')
-          .eq('id', parsed.id)
+          .select('id, name, email, subscription_status, subscription_plan, trial_ends_at, max_subaccounts')
+          .eq('id', interim.id)
           .maybeSingle()
 
         if (data) {
-          const refreshed: User = { id: data.id, name: data.name as unknown as string | undefined, email: data.email }
+          const refreshed = userFromRow(data)
           setUser(refreshed)
           localStorage.setItem('user', JSON.stringify(refreshed))
         }
@@ -49,17 +95,10 @@ export function useAuth() {
   }, [router])
 
   const logout = async () => {
-    // Clear cookie
     await fetch('/api/auth/logout', { method: 'POST' })
-    
-    // Clear localStorage
     localStorage.removeItem('user')
-    
-    // Use window.location.href instead of router.push to force full page reload
-    // This ensures clean state and prevents stuck redirects
     window.location.href = '/login'
   }
 
-  return { user, loading, logout }
+  return { user, loading, logout, refreshUser }
 }
-
