@@ -2682,6 +2682,19 @@ function detectMediaType(url, contentType) {
 // GHL Provider Webhook (for incoming messages)
 app.post('/ghl/provider/webhook', async (req, res) => {
   try {
+    const skipMessageText = String(req.body.message || req.body.body || '');
+    const phoneMissing =
+      req.body.phone === undefined ||
+      req.body.phone === null ||
+      req.body.phone === '';
+    const looksLikeEmailBody =
+      skipMessageText.includes('<html>') ||
+      skipMessageText.includes('<div class="ProseMirror">');
+    if (phoneMissing || looksLikeEmailBody) {
+      console.log('⏭️ Skipped non-WhatsApp/Email message');
+      return res.status(200).json({ status: 'skipped', reason: 'non_whatsapp_email' });
+    }
+
     console.log('📥 GHL Webhook Received:', {
       type: req.body.type,
       locationId: req.body.locationId,
