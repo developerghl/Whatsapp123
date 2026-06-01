@@ -2682,21 +2682,9 @@ function detectMediaType(url, contentType) {
 // GHL Provider Webhook (for incoming messages)
 app.post('/ghl/provider/webhook', async (req, res) => {
   try {
-    const skipMessageText = String(req.body.message || req.body.body || '');
-    const phoneMissing =
-      req.body.phone === undefined ||
-      req.body.phone === null ||
-      req.body.phone === '';
-    const looksLikeEmailBody =
-      skipMessageText.includes('<html>') ||
-      skipMessageText.includes('<div class="ProseMirror">');
-    if (phoneMissing || looksLikeEmailBody) {
-      console.log('⏭️ Skipped non-WhatsApp/Email message');
-      return res.status(200).json({ status: 'skipped', reason: 'non_whatsapp_email' });
-    }
-
     console.log('📥 GHL Webhook Received:', {
       type: req.body.type,
+      messageType: req.body.messageType,
       locationId: req.body.locationId,
       phone: req.body.phone,
       messageId: req.body.messageId,
@@ -2723,20 +2711,18 @@ app.post('/ghl/provider/webhook', async (req, res) => {
 
     console.log('✅ Processing OutboundMessage webhook');
 
-    const earlyMsgId = req.body.messageId;
-    if (earlyMsgId) {
-      if (!global.webhookDedup) global.webhookDedup = new Map();
-      if (global.webhookDedup.has(earlyMsgId)) {
-        console.log(`⏭️ Duplicate OutboundMessage ignored: ${earlyMsgId}`);
-        return res.json({ status: 'skipped', reason: 'duplicate_webhook' });
-      }
-      global.webhookDedup.set(earlyMsgId, Date.now());
-      setTimeout(() => global.webhookDedup.delete(earlyMsgId), 60000);
+    // Only forward our own provider channels to WhatsApp.
+    // Our WhatsApp messages arrive with messageType "Custom" (TYPE_CUSTOM_PROVIDER_SMS).
+    // Email (messageType "Email") and any other channel must be skipped so they
+    // are never forwarded to the WhatsApp number.
+    const allowedMessageTypes = ['Custom', 'SMS', 'WhatsApp'];
+    if (req.body.messageType && !allowedMessageTypes.includes(req.body.messageType)) {
+      console.log(`⏭️ Skipping messageType: ${req.body.messageType} (not meant for WhatsApp)`);
+      return res.json({ status: 'skipped', reason: `messageType_${req.body.messageType}` });
     }
 
     const locationId = req.body.locationId;
 
-    // Only process if this location has an active WhatsApp session
     const { data: webhookGhlAccount } = await supabaseAdmin
       .from('ghl_accounts')
       .select('id')
@@ -2746,6 +2732,17 @@ app.post('/ghl/provider/webhook', async (req, res) => {
     if (!webhookGhlAccount) {
       console.log(`⏭️ No GHL account found for location ${locationId} - skipping`);
       return res.json({ status: 'skipped', reason: 'no_ghl_account' });
+    }
+
+    const earlyMsgId = req.body.messageId;
+    if (earlyMsgId) {
+      if (!global.webhookDedup) global.webhookDedup = new Map();
+      if (global.webhookDedup.has(earlyMsgId)) {
+        console.log(`⏭️ Duplicate OutboundMessage ignored: ${earlyMsgId}`);
+        return res.json({ status: 'skipped', reason: 'duplicate_webhook' });
+      }
+      global.webhookDedup.set(earlyMsgId, Date.now());
+      setTimeout(() => global.webhookDedup.delete(earlyMsgId), 60000);
     }
 
     const { data: activeSession } = await supabaseAdmin
