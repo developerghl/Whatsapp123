@@ -3370,13 +3370,13 @@ function getProviderId() {
 }
 
 // WhatsApp message receiver webhook (for incoming WhatsApp messages)
-app.post('/whatsapp/webhook', async (req, res) => {
+async function processIncomingWhatsAppMessage(payload) {
   try {
     // ✅ FIX 1: 'const' ki jagah 'let' use karein taake hum 'from' ko modify kar sakein
-    let { from, message, messageType = 'text', mediaUrl, mediaMessage, timestamp: messageTimestamp, sessionId, whatsappMsgId } = req.body;
+    let { from, message, messageType = 'text', mediaUrl, mediaMessage, timestamp: messageTimestamp, sessionId, whatsappMsgId } = payload;
 
     if (!from) {
-      return res.json({ status: 'success' });
+      return { status: 'success' };
     }
 
     // ✅ FIX 2: Jo bhi data aaye, usko zabardasti String (Text) bana do taake crash na ho
@@ -3384,7 +3384,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
 
     // Allow empty message for media messages
     if (!message && !mediaUrl && !mediaMessage) {
-      return res.json({ status: 'success' });
+      return { status: 'success' };
     }
 
     // Deterministic mapping: phone → locationId → providerId → location_api_key
@@ -3437,7 +3437,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
     }
 
     if (!ghlAccount) {
-      return res.json({ status: 'success' });
+      return { status: 'success' };
     }
 
     const locationId = ghlAccount.location_id;
@@ -3447,7 +3447,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
     if (!providerId) {
       providerId = getProviderId();
       if (!providerId) {
-        return res.json({ status: 'error', message: 'Provider ID not available' });
+        return { status: 'error', message: 'Provider ID not available' };
       }
     }
 
@@ -3464,14 +3464,14 @@ app.post('/whatsapp/webhook', async (req, res) => {
     let conversationId = null;
 
     // Handle outbound messages (sent from phone) - sync to GHL conversation
-    if (req.body.fromMe === true) {
+    if (payload.fromMe === true) {
       console.log(`📤 Outbound from phone to: ${phone}`);
       
       // ✅ Loop prevention — same message dobara process mat karo
-      const outAltId = req.body.whatsappMsgId || `wa_out_${Date.now()}`;
+      const outAltId = payload.whatsappMsgId || `wa_out_${Date.now()}`;
       if (!global.outboundSyncCache) global.outboundSyncCache = new Map();
       if (global.outboundSyncCache.has(outAltId)) {
-        return res.json({ status: 'success', reason: 'duplicate_skip' });
+        return { status: 'success', reason: 'duplicate_skip' };
       }
       global.outboundSyncCache.set(outAltId, Date.now());
       setTimeout(() => global.outboundSyncCache.delete(outAltId), 5 * 60 * 1000);
@@ -3528,16 +3528,16 @@ app.post('/whatsapp/webhook', async (req, res) => {
                 console.log(`✅ New contact created for outbound message: ${outContactId}`);
               } else {
                 console.log(`❌ Failed to create contact for outbound message`);
-                return res.json({ status: 'success', reason: 'contact_creation_failed' });
+                return { status: 'success', reason: 'contact_creation_failed' };
               }
             } catch(e) {
                 console.error(`❌ Error creating contact:`, e.message);
-                return res.json({ status: 'success', reason: 'contact_creation_error' });
+                return { status: 'success', reason: 'contact_creation_error' };
             }
           } else {
             // Setting OFF hai, toh skip kar do (Exactly like Inbound)
             console.log(`⏭️ Contact not found for outbound and creation is DISABLED: ${phone}`);
-            return res.json({ status: 'success', reason: 'contact_not_found_creation_disabled' });
+            return { status: 'success', reason: 'contact_not_found_creation_disabled' };
           }
         }
       
@@ -3575,7 +3575,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
         console.error(`❌ Error syncing outbound message:`, outboundError.message);
       }
 
-      return res.json({ status: 'success', reason: 'outbound_synced' });
+      return { status: 'success', reason: 'outbound_synced' };
     }
 
     if (settings.create_contact_in_ghl) {
@@ -3665,7 +3665,7 @@ app.post('/whatsapp/webhook', async (req, res) => {
       console.log(`⏭️ Skipping message sync - contact creation disabled and contact not found for ${phone}`);
       // Still track analytics for received message
       await subaccountHelpers.incrementAnalytics(ghlAccount.id, ghlAccount.user_id, 'received');
-      return res.json({ status: 'success', reason: 'contact_creation_disabled' });
+      return { status: 'success', reason: 'contact_creation_disabled' };
     }
 
     // Track analytics for received message
@@ -3749,10 +3749,10 @@ app.post('/whatsapp/webhook', async (req, res) => {
 
               if (inboundRes.ok) {
                 console.log(`✅ Media URL sent as attachment to GHL`);
-                return res.json({
+                return {
                   status: 'success',
                   message: 'Media sent as URL attachment'
-                });
+                };
               }
             }
 
@@ -3916,12 +3916,24 @@ app.post('/whatsapp/webhook', async (req, res) => {
 
     // IMPORTANT: Yahan WhatsApp ko kuch wapas send na karein (no echo)
 
-    res.json({ status: 'success' });
+    return { status: 'success' };
   } catch (error) {
     console.error('WhatsApp webhook error:', error);
-    res.json({ status: 'success' });
+    return { status: 'success' };
+  }
+}
+
+app.post('/whatsapp/webhook', async (req, res) => {
+  try {
+    const result = await processIncomingWhatsAppMessage(req.body);
+    res.json(result || { status: 'ok' });
+  } catch (err) {
+    console.error('❌ /whatsapp/webhook error:', err.message);
+    res.status(500).json({ status: 'error', error: err.message });
   }
 });
+
+module.exports.processIncomingWhatsAppMessage = processIncomingWhatsAppMessage;
 
 // GHL Provider Send Message (Legacy endpoint - keep for compatibility)
 app.post('/ghl/provider/send', async (req, res) => {

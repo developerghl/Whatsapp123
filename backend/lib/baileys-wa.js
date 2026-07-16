@@ -996,19 +996,16 @@ class BaileysWhatsAppManager {
             if (!outboundText) return;
 
             try {
-              const webhookUrl = `${process.env.BACKEND_URL || 'https://api.octendr.com'}/whatsapp/webhook`;
-              fetch(webhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  from,
-                  message: outboundText,
-                  messageType: 'text',
-                  timestamp: msg.messageTimestamp,
-                  sessionId,
-                  whatsappMsgId: `wa_out_${msg.key.id}`,
-                  fromMe: true
-                })
+              console.log('🔗 Processing webhook internally (no HTTP self-call)');
+              const { processIncomingWhatsAppMessage } = require('../server');
+              processIncomingWhatsAppMessage({
+                from,
+                message: outboundText,
+                messageType: 'text',
+                timestamp: msg.messageTimestamp,
+                sessionId,
+                whatsappMsgId: `wa_out_${msg.key.id}`,
+                fromMe: true
               }).then(() => {
                 console.log(`✅ Outbound message synced to webhook: ${outboundText.substring(0, 50)}`);
               }).catch(err => {
@@ -1186,36 +1183,22 @@ class BaileysWhatsAppManager {
               timestamp: msg.messageTimestamp
             });
             
-            // Forward to GHL webhook
+            // Forward to GHL webhook (direct call — avoids HTTP self-call timeout)
             try {
-              const webhookUrl = `${process.env.BACKEND_URL || 'https://api.octendr.com'}/whatsapp/webhook`;
-              console.log(`🔗 Calling webhook: ${webhookUrl}`);
-              
-              const webhookResponse = await fetch(webhookUrl, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  from,
-                  message: messageText,
-                  messageType,
-                  mediaUrl,
-                  mediaMessage: mediaMessage, // Include full message for decryption
-                  timestamp: msg.messageTimestamp,
-                  sessionId,
-                  whatsappMsgId: msg.key.id // For idempotency
-                })
+              console.log('🔗 Processing webhook internally (no HTTP self-call)');
+              const { processIncomingWhatsAppMessage } = require('../server');
+              const webhookResult = await processIncomingWhatsAppMessage({
+                from,
+                message: messageText,
+                messageType,
+                mediaUrl,
+                mediaMessage: mediaMessage, // Include full message for decryption
+                timestamp: msg.messageTimestamp,
+                sessionId,
+                whatsappMsgId: msg.key.id // For idempotency
               });
-              
-              if (webhookResponse.ok) {
-                const responseText = await webhookResponse.text();
-                console.log(`✅ Message forwarded to GHL webhook for session: ${sessionId}`);
-                console.log(`📊 Webhook response:`, responseText);
-              } else {
-                const errorText = await webhookResponse.text();
-                console.error(`❌ Failed to forward message to GHL webhook (${webhookResponse.status}):`, errorText);
-              }
+              console.log(`✅ Message forwarded to GHL webhook for session: ${sessionId}`);
+              console.log(`📊 Webhook response:`, JSON.stringify(webhookResult));
             } catch (webhookError) {
               console.error(`❌ Error forwarding message to GHL webhook:`, webhookError);
             }
